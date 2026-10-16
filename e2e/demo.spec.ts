@@ -5,10 +5,12 @@ test('полный демо-заказ без отправки данных',asy
  await page.goto('/');
  await page.getByRole('button',{name:'Indie Dance',exact:true}).click();
  await expect(page.locator('.expert-card')).toHaveCount(1);
- await page.getByRole('button',{name:'Подробнее',exact:true}).click();
- await expect(page.getByRole('dialog')).toContainText('Вымышленный профиль');
- await page.getByRole('button',{name:'Выбрать разбор'}).click();
+ await page.getByRole('button',{name:'О профиле',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('Участие в FW LABEL NETWORK пока не подтверждено');
+ await page.getByRole('button',{name:'Попробовать с демо-экспертом'}).click();
  await expect(page.locator('input[type=file]')).toHaveCount(0);
+ await expect(page.getByRole('dialog')).toContainText('Демо-эксперт / Indie Dance');
+ await expect(page.getByRole('dialog')).not.toContainText('DEFLEE');
  await page.getByLabel('Псевдоним').fill('Demo Artist');
  await page.getByLabel('Название трека').fill('Afterhours');
  await page.getByLabel('Тестовый контакт').fill('@demo');
@@ -36,4 +38,12 @@ test('мобильный экран и навигация',async({page})=>{
  await expect(page.locator('nav')).not.toBeVisible();
  await page.screenshot({path:'artifacts/mobile.png',fullPage:true});
 });
-test('настольный экран',async({page})=>{await page.setViewportSize({width:1440,height:1000});await page.goto('/');await page.screenshot({path:'artifacts/desktop.png',fullPage:true});});
+test('настольный экран',async({page})=>{await page.setViewportSize({width:1440,height:1000});await page.goto('/');
+ await expect(page.locator('.record-art')).toHaveCount(0);
+ const portraits=page.locator('.expert-portrait img');
+ await expect(portraits).toHaveCount(4);
+ for(const image of await portraits.all()){
+  await image.scrollIntoViewIfNeeded();
+  await expect.poll(()=>image.evaluate((el:HTMLImageElement)=>el.complete&&el.naturalWidth>0)).toBe(true);
+ }
+ await page.screenshot({path:'artifacts/desktop.png',fullPage:true});});
