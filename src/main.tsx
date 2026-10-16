@@ -18,9 +18,9 @@ function App(){
  <main id="main-content" tabIndex={-1}>
  <section className="hero">
  <div className="hero-symbol" aria-hidden="true"><AudioLines size={42} strokeWidth={1.6}/></div>
- <p className="eyebrow">Платный разбор трека музыкальным экспертом</p>
+ <p className="eyebrow">Платный разбор твоего трека</p>
  <h1>Отправляешь демо на лейблы —<br/> а в ответ тишина?</h1>
- <p className="hero-lead"><strong>Пойми, что доработать перед следующей отправкой на лейблы.</strong> Выбираешь специалиста в своём жанре. Он слушает трек целиком и записывает голосовой отзыв с конкретными рекомендациями.</p>
+ <p className="hero-lead"><strong>Услышь мнение тех, кто сам выпускает музыку.</strong> Продюсер или владелец лейбла в твоём жанре прослушает трек целиком и запишет личный голосовой отзыв: что работает и что доработать перед следующей отправкой.</p>
  <div className="hero-results"><span><Check size={18}/> Что доработать в первую очередь</span><span><Check size={18}/> Готов ли трек к отправке</span><span><Check size={18}/> Каким лейблам он может подойти</span></div>
  <div className="hero-actions"><a className="button primary" href="#review-example">Посмотреть пример разбора <ArrowRight size={18}/></a><a className="text-link" href="#experts">Кто будет разбирать <ArrowDown size={17}/></a></div>
  <p className="hero-price">Один трек · голосовой ответ на 2–4 минуты · один раунд уточнений</p>
@@ -37,7 +37,7 @@ function App(){
  <div className="section-arrow" aria-hidden="true"><ArrowDown size={24}/></div>
  </section>
  <section className="experts-section section" id="experts">
- <div className="section-heading centered"><span className="section-kicker">02 / ЛЮДИ, КОТОРЫЕ ПОНИМАЮТ ЗВУК</span><h2>За музыкой стоят люди.</h2><p>Знакомься с артистами, которых мы хотели бы пригласить.<br/> Их участие в платформе пока не подтверждено.</p></div>
+ <div className="section-heading centered"><span className="section-kicker">02 / ЛЮДИ, КОТОРЫЕ ПОНИМАЮТ ЗВУК</span><h2>Продюсеры и владельцы лейблов.</h2><p>Знакомься с артистами, которых мы хотели бы пригласить.<br/> Их участие в платформе пока не подтверждено.</p></div>
  <div className="expert-grid">{candidates.filter(e=>genre==='Все жанры'||e.genres.includes(genre)).map(e=><article className="expert-card" key={e.id}>
  <button className="expert-portrait" onClick={()=>setProfile(e)} aria-label={`Подробнее: ${e.name}`}>
  {e.photo?<img src={`${import.meta.env.BASE_URL}${e.photo}`} alt={e.name} style={{objectPosition:e.photoPosition}} loading="lazy"/>:<div className="portrait-placeholder"><UserRound size={62} strokeWidth={1}/><span>Фото готовится</span></div>}
