@@ -19,7 +19,7 @@ function App(){
  <section className="hero">
  <div className="hero-symbol" aria-hidden="true"><AudioLines size={42} strokeWidth={1.6}/></div>
  <p className="eyebrow">Платный разбор твоего трека</p>
- <h1>Не гадай, почему твой трек<br/> не берут на лейбл!</h1>
+ <h1>Не гадай, почему твой трек<br/> не берёт хороший лейбл</h1>
  <p className="hero-lead"><strong>Спроси у самих владельцев лейблов и саунд-продюсеров, которые уже на них выпускаются.</strong> Полное прослушивание твоего трека и личный голосовой отзыв: что работает и что доработать перед следующей отправкой.</p>
  <div className="hero-results"><span><Check size={18}/> Что доработать в первую очередь</span><span><Check size={18}/> Готов ли трек к отправке</span><span><Check size={18}/> Каким лейблам он может подойти</span></div>
  <div className="hero-actions"><a className="button primary" href="#review-example">Посмотреть пример разбора <ArrowRight size={18}/></a><a className="text-link" href="#experts">Кто будет разбирать <ArrowDown size={17}/></a></div>
