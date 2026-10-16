@@ -41,7 +41,7 @@ test('мобильный экран и навигация',async({page})=>{
 test('настольный экран',async({page})=>{await page.setViewportSize({width:1440,height:1000});await page.goto('/');
  await expect(page.locator('.record-art')).toHaveCount(0);
  const portraits=page.locator('.expert-portrait img');
- await expect(portraits).toHaveCount(4);
+ await expect(portraits).toHaveCount(5);
  for(const image of await portraits.all()){
   await image.scrollIntoViewIfNeeded();
   await expect.poll(()=>image.evaluate((el:HTMLImageElement)=>el.complete&&el.naturalWidth>0)).toBe(true);
