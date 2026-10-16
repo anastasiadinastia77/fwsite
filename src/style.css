@@ -128,3 +128,122 @@ h3{font-weight:700}
  .form-grid{gap:0}
  footer{gap:24px}
 }
+
+/* Poster direction, based on the customer's Fantomaswife reference. */
+:root{--paper:#fffaf2;--accent:#ff4d00;--cream:#fffaf2;background:var(--paper);color:#050505}
+header,.modal,nav{background:var(--paper)}
+header{border-color:#111}
+.brand b{font-family:'Oswald',Arial,sans-serif;font-size:50px;letter-spacing:-3px}
+.brand b span{margin-left:4px}
+.brand>span{border-color:#111}
+h1,h2,h3,.price,.poster-price,.step-no,.poster-masthead,.offer-caption{font-family:'Oswald',Arial,sans-serif;font-weight:700}
+h2,.offer h2,.closing h2{font-size:clamp(42px,4.8vw,72px);letter-spacing:-1.5px;line-height:1.08;text-transform:uppercase;text-wrap:initial}
+h3{font-size:30px;text-transform:uppercase;letter-spacing:-.5px}
+.section-kicker{font-size:14px;letter-spacing:1.2px;font-weight:800}
+.hero.poster-hero{display:block;padding-top:40px;padding-bottom:56px;overflow:visible}
+.poster-masthead{display:flex;align-items:center;gap:24px;font-size:25px;line-height:1.2;letter-spacing:-.3px;margin-bottom:24px}
+.masthead-rule{height:2px;background:#111;flex:1}
+.poster-masthead>span:last-child{font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:1px}
+.hero.poster-hero h1{display:block;font-family:'Oswald',Arial,sans-serif;font-weight:700;font-size:clamp(56px,9.9vw,152px);letter-spacing:-.05em;line-height:1.05;margin:0 0 26px}
+.hero.poster-hero .headline-row{display:block;color:#050505;white-space:nowrap}
+.poster-price{display:flex;align-items:center;justify-content:space-between;gap:24px;background:#ff4d00;color:#000;padding:12px 24px 18px;font-size:clamp(44px,6.6vw,100px);letter-spacing:-3px;line-height:1.18}
+.poster-price strong{font-weight:700;white-space:nowrap;font-size:1.12em;letter-spacing:-4px}
+.poster-price svg{width:65px;height:65px;stroke-width:2.5;flex-shrink:0}
+.poster-price:hover{background:#ff6528}
+.poster-under{display:flex;justify-content:space-between;gap:24px;align-items:center;border-bottom:2px solid #111;padding:14px 0 20px;font-weight:700;font-size:16px;line-height:1.5}
+.poster-under>span:last-child{font-size:13px;letter-spacing:.5px}
+.hero-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:64px;margin-top:40px;align-items:center}
+.hero-copy>p{font-size:24px;line-height:1.5;color:#111;margin-top:0;margin-bottom:32px;max-width:36ch}
+.hero-copy>p br{display:none}
+.hero-copy>p br:after{content:' '}
+.hero-copy>p{white-space:normal}
+.hero-body .record-art{min-height:380px;background:transparent;border:1px solid #111}
+.hero-body .record{width:300px}
+.hero-body .record-label{background:#ff4d00}
+.record-label small{font-size:8px}
+.art-top{border-color:#111}
+.art-bottom{font-weight:700}
+.hero-note{border-top:1px solid #aaa;padding-top:24px;margin-top:32px}
+.primary{background:#ff4d00;color:#000;font-weight:800}
+.primary:hover{background:#ff6528}
+.offer .primary,.closing .primary{background:#ff4d00;color:#000}
+.offer .primary:hover,.closing .primary:hover{background:#ff6528}
+.button{border:1px solid #111}
+.offer,.closing{background:#050505}
+.offer h2,.closing h2{color:var(--paper)}
+.offer h2 em{color:#ff6b2c}
+.ticker{background:#050505;border-top:1px solid #111;border-bottom:1px solid #111;color:var(--paper)}
+.ticker span:nth-child(even){color:#ff6b2c}
+.intro{border-bottom:2px solid #111}
+.process{background:#efebe3}
+.section-heading{border-top:2px solid #111;padding-top:24px}
+.expert-art{background:#e4e0d8;color:#111}
+.expert-art .abstract-shape{filter:grayscale(1)}
+.expert-art.art-2,.expert-art.art-5{background:#ff4d00}
+.profile-badge{background:var(--paper);color:#111;border-color:#111;font-weight:700}
+.art-code{font-family:'Oswald',Arial,sans-serif;font-size:18px}
+.expert-info h3{font-size:32px;min-height:0;line-height:1.2}
+.filters button{border-color:#111;color:#111}
+.filters button.active{background:#ff4d00;color:#000;border-color:#111}
+.filters button:not(.active):hover{background:#e5dfd4}
+.service-card{border-color:#111;background:transparent}
+.service-card h3{font-size:36px;line-height:1.1;overflow-wrap:normal}
+.service-card h4{font-size:20px;margin-top:8px}
+.service-card>div>span{font-family:'Oswald',Arial,sans-serif;font-size:32px;color:#111}
+.price{font-size:100px;letter-spacing:-4px;line-height:1.1}
+.price>span{font-size:60px}
+.price-card{border-color:#777}
+.interview{background:#efebe3}
+.interview-art{background:#050505;color:var(--paper)}
+.interview-art>span{background:#ff4d00;color:#000;padding:8px 12px;font-weight:700}
+.faq summary{font-size:22px;font-weight:700}
+.modal h2{font-family:'Oswald',Arial,sans-serif;text-transform:uppercase;font-size:42px;line-height:1.15;letter-spacing:-.5px}
+.modal h3{font-size:27px;line-height:1.2}
+.modal .primary{background:#ff4d00;color:#000}
+.modal .pill{border-color:#111;font-weight:700}
+.profile-visual{background:#e4e0d8}
+.order-progress .current{color:#111;border-bottom:3px solid #ff4d00}
+footer{border-top:1px solid #111}
+@media(min-width:1450px){.hero.poster-hero h1{font-size:152px}}
+@media(max-width:1100px){
+ .hero.poster-hero h1{font-size:10vw}
+ .hero-body{gap:32px}
+ .hero-copy>p{font-size:22px}
+ .poster-masthead{font-size:22px}
+ .poster-price{font-size:6.7vw;letter-spacing:-2px}
+ .service-card h3{font-size:30px}
+ .hero-body .record{width:260px}
+}
+@media(max-width:700px){
+ .hero.poster-hero{padding-top:28px;padding-bottom:40px}
+ .poster-masthead{font-size:20px;gap:16px;margin-bottom:20px}
+ .poster-masthead>span:last-child{display:none}
+ .hero.poster-hero h1{font-size:10.1vw;line-height:1.13;letter-spacing:-.04em;margin-bottom:20px}
+ .poster-price{padding:12px 14px 16px;gap:8px;flex-wrap:wrap;font-size:8.2vw;line-height:1.1;letter-spacing:-1px}
+ .poster-price strong{font-size:1.3em;letter-spacing:-1.5px}
+ .poster-price svg{width:30px;height:30px}
+ .poster-under{align-items:flex-start;flex-direction:column;gap:8px;padding:14px 0;font-size:14px}
+ .poster-under>span:last-child{font-size:12px}
+ .hero-body{grid-template-columns:1fr;gap:32px;margin-top:28px}
+ .hero-copy>p{font-size:22px;line-height:1.5;max-width:100%}
+ .hero-body .record-art{min-height:340px}
+ .hero-body .record{width:250px}
+ h2,.offer h2,.closing h2{font-size:42px;letter-spacing:-1px}
+ .offer h2{font-size:clamp(32px,9.2vw,52px)}
+ .section-heading{padding-top:20px}
+ .service-card h3{font-size:32px;overflow-wrap:anywhere}
+ .expert-info h3{font-size:32px}
+ .modal h2{font-size:36px}
+ .modal h3{font-size:26px}
+ .price{font-size:86px}
+ .price>span{font-size:48px}
+ .faq summary{font-size:20px}
+}
+.intro>div,.hero-body>div{min-width:0}
+@media(max-width:700px){h2,.offer h2,.closing h2{font-size:clamp(32px,10vw,42px);overflow-wrap:anywhere}}
+@media(max-width:700px){
+ .poster-price{display:grid;grid-template-columns:minmax(0,1fr) auto 24px;gap:8px;font-size:7vw;letter-spacing:-.5px;padding:14px}
+ .poster-price strong{font-size:1.3em;letter-spacing:-1px}
+ .poster-price svg{width:24px;height:24px}
+ .poster-under>span:last-child{font-size:14px}
+}
