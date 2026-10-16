@@ -25,16 +25,16 @@ function App(){
  <div className="hero-actions"><a className="button primary" href="#review-example">Посмотреть пример разбора <ArrowRight size={18}/></a><a className="text-link" href="#experts">Кто будет разбирать <ArrowDown size={17}/></a></div>
  <p className="hero-price">Один трек · голосовой ответ на 2–4 минуты · один раунд уточнений</p>
  </section>
+ <section className="directions section" id="directions">
+ <div className="section-heading centered"><span className="section-kicker">01 / НАПРАВЛЕНИЕ</span><h2>Начни со своего звучания.</h2><p>Выбери жанр, чтобы увидеть потенциальных экспертов.</p></div>
+ <div className="filters" aria-label="Фильтр по жанру">{genres.map(g=><button key={g} className={genre===g?'active':''} onClick={()=>setGenre(g)} aria-pressed={genre===g}>{g}</button>)}</div>
+ <div className="section-arrow" aria-hidden="true"><ArrowDown size={24}/></div>
+ </section>
  <section className="review-example section" id="review-example">
  <div className="section-heading centered"><span className="section-kicker">РЕЗУЛЬТАТ, КОТОРЫЙ МОЖНО ПРИМЕНИТЬ</span><h2>Пойми, с чего начать доработку.</h2><p>После разбора у тебя есть план доработки перед следующей отправкой: что сохранить, что изменить и в каком порядке действовать.</p></div>
  <div className="example-layout"><div className="example-explanation"><span className="example-label">Учебный пример</span><h3>Вот как могут выглядеть рекомендации.</h3><p>Это вымышленный пример для знакомства с форматом. Настоящие выводы эксперт делает после полного прослушивания твоего трека.</p><div className="example-delivery"><Headphones size={24}/><div><strong>Личный голосовой разбор</strong><span>2–4 минуты по твоей композиции</span></div></div><p className="fine">На сайте пример показан текстом. Реальной записи и отзыва артиста здесь нет.</p></div>
  <div className="example-notes"><div><span className="micro">01 / ЧТО УЖЕ РАБОТАЕТ</span><h3>У трека есть запоминающаяся идея.</h3><p>Главный мотив узнаваемый, а фактура поддерживает настроение. Эту основу стоит сохранить при доработке.</p></div><div><span className="micro">02 / ЧТО ПОПРОБОВАТЬ ИЗМЕНИТЬ</span><h3>Быстрее раскрыть главный мотив.</h3><p>В этом учебном примере вступление затянуто, а энергия между разделами почти не меняется. Можно сократить вступление и усилить контраст перед первым дропом.</p></div><div><span className="micro">03 / С ЧЕГО НАЧАТЬ</span><h3>Сначала структура, затем баланс.</h3><p>Проверить развитие аранжировки, после этого сравнить баланс кика и баса с подходящими референсами. Готовность к отправке на лейблы оценивать после этих изменений.</p></div></div></div>
  <div className="example-next"><p>Хочешь понять, как пройдёт твой разбор?<br/> Пройди весь путь в демо — от оформления до уточняющих вопросов.</p><button className="button primary" onClick={()=>begin(demoExpert(genre==='Все жанры'?'Organic House':genre))}>Попробовать демо-разбор <ArrowRight size={18}/></button></div>
- </section>
- <section className="directions section" id="directions">
- <div className="section-heading centered"><span className="section-kicker">01 / НАПРАВЛЕНИЕ</span><h2>Начни со своего звучания.</h2><p>Выбери жанр, чтобы увидеть потенциальных экспертов.</p></div>
- <div className="filters" aria-label="Фильтр по жанру">{genres.map(g=><button key={g} className={genre===g?'active':''} onClick={()=>setGenre(g)} aria-pressed={genre===g}>{g}</button>)}</div>
- <div className="section-arrow" aria-hidden="true"><ArrowDown size={24}/></div>
  </section>
  <section className="experts-section section" id="experts">
  <div className="section-heading centered"><span className="section-kicker">02 / ЛЮДИ, КОТОРЫЕ ПОНИМАЮТ ЗВУК</span><h2>Продюсеры и владельцы лейблов.</h2><p>Знакомься с артистами, которых мы хотели бы пригласить.<br/> Их участие в платформе пока не подтверждено.</p></div>
