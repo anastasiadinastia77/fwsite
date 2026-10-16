@@ -52,3 +52,79 @@ h2{font-size:clamp(36px,3.6vw,56px)}
 }
 
 .demo-banner .dot{background:#fff}
+
+/* Editorial rhythm, persistent navigation and consistent interactive states. */
+:root{--page-gutter:clamp(20px,5vw,80px);--page-inset:max(var(--page-gutter),calc((100vw - 1320px)/2))}
+html{scroll-padding-top:124px}
+main{padding:0}
+header{position:sticky;top:0;z-index:10;height:96px;margin:0;padding:0 var(--page-inset);background:#fff;border-bottom:1px solid #ccc;gap:24px}
+.section,.hero,.closing{padding-left:var(--page-inset);padding-right:var(--page-inset)}
+.demo-banner,footer{padding-left:var(--page-inset);padding-right:var(--page-inset)}
+.skip-link{position:fixed;top:12px;left:20px;z-index:30;padding:12px 20px;background:#111;color:#fff;transform:translateY(-160%);font-size:18px;font-weight:700}
+.skip-link:focus{transform:translateY(0)}
+main:focus{outline:none!important;box-shadow:none}
+::selection{background:#111;color:#fff}
+.hero-copy>p,.large-copy,.offer-copy>p,.interview p,.faq details p{max-width:62ch}
+.hero-copy>p{margin-top:32px;margin-bottom:32px}
+h2{max-width:22ch;text-wrap:balance}
+h3{font-weight:700}
+.section-heading{align-items:flex-start;gap:32px;margin-bottom:40px}
+.section-heading>p{max-width:38ch;margin-top:38px}
+.intro-columns{gap:32px}
+.expert-grid{column-gap:32px;row-gap:48px}
+.expert-card{display:flex;flex-direction:column;min-width:0}
+.expert-info{display:flex;flex-direction:column;flex:1;padding-top:24px}
+.expert-info>p{flex:1;margin-top:0;margin-bottom:24px}
+.card-actions{gap:16px}
+.card-actions button{padding:8px 0;transition:color .15s}
+.card-actions button:hover,.text-link:hover{text-decoration:underline;text-underline-offset:5px}
+.filters{gap:10px;margin-top:32px;margin-bottom:32px}
+.filters button{font-weight:600;transition:background .15s,color .15s}
+.filters button:not(.active):hover{background:#eee}
+.service-card{display:flex;flex-direction:column;padding:32px}
+.service-card>p{flex:1}.service-card>div{gap:24px}
+.service-card button:hover{background:#111;color:#fff}
+.faq summary{min-height:72px;font-size:20px;line-height:1.5;padding:24px 0}
+.faq summary svg,.button svg,.text-link svg,.card-actions svg,.modal label svg{flex-shrink:0}
+.faq summary:hover{text-decoration:underline;text-underline-offset:5px}
+.faq details[open]{padding-bottom:8px}
+.modal{padding:40px;scrollbar-gutter:stable;overscroll-behavior:contain}
+.modal .close{top:16px;right:16px;border:1px solid #ccc;background:#fff;display:flex;align-items:center;justify-content:center}
+.modal .close:hover{background:#eee}
+.modal label{line-height:1.5;margin:24px 0}
+.modal input,.modal textarea,.modal select{min-height:52px;border-color:#888;background:#fff;padding:14px}
+.modal input::placeholder,.modal textarea::placeholder{color:#626262;opacity:1}
+.modal textarea{min-height:104px}
+.modal .notice{border-left:3px solid #111;background:#eee}
+.order-progress{line-height:1.6;row-gap:12px}
+@media(min-width:1450px){.hero{gap:64px}.section{padding-top:96px;padding-bottom:96px}}
+@media(min-width:701px) and (max-width:900px){.hero{grid-template-columns:1fr;gap:40px}.hero h1{font-size:64px}.record-art{min-height:460px}.offer{grid-template-columns:1fr;gap:40px}.offer-copy>p{max-width:60ch}.hero-copy>p{max-width:58ch}}
+@media(max-width:1100px){.section-heading{flex-direction:column;gap:16px}.section-heading>p{margin-top:0;max-width:58ch}}
+@media(max-width:700px){
+ html{scroll-padding-top:100px}
+ header{height:80px;gap:16px}
+ nav{top:100%;padding:24px var(--page-gutter);gap:8px}
+ nav a{min-height:48px;display:flex;align-items:center;border-bottom:1px solid #ddd}
+ .hero{padding-top:40px;padding-bottom:48px}
+ .hero-copy>p{line-height:1.75}
+ .hero-actions{align-items:stretch;flex-direction:column;gap:16px}
+ .hero-actions .button{width:100%}
+ .hero-actions .text-link{min-height:48px;justify-content:space-between}
+ .hero-note{margin-top:24px}
+ .section{padding-top:56px;padding-bottom:56px}
+ .section-heading{gap:16px;margin-bottom:32px}
+ .section-heading>p{margin:0}
+ .expert-grid{row-gap:40px}
+ .expert-info h3{margin-top:12px;margin-bottom:16px}
+ .card-actions button{flex:1;justify-content:space-between}
+ .card-actions button+button{padding-left:16px;border-left:1px solid #ccc}
+ .steps{gap:32px}.steps h3{margin-top:20px}
+ .service-card,.price-card{padding:24px}
+ .faq summary{font-size:20px}
+ .modal{padding:32px 20px;scrollbar-gutter:auto}
+ .modal h2{letter-spacing:-1px;overflow-wrap:anywhere}
+ .modal .pill{max-width:calc(100% - 44px);margin-right:44px;line-height:1.7}
+ .modal .full{min-height:56px}
+ .form-grid{gap:0}
+ footer{gap:24px}
+}
