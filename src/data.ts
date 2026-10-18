@@ -17,6 +17,7 @@ export const candidates: Candidate[] = [
  {id:'maxxim',name:'Maxxim',genres:['Organic House','Melodic House & Techno'],tagline:'Владелец Songuara · Anjunadeep',description:'DJ и продюсер. Релизы на Anjunadeep и A Tribe Called Kotori. В музыке и сетах соединяет Organic, Melodic и Progressive House. Владелец Songuara — по информации заказчика.',photo:'experts/maxxim.jpg',source:'https://soundcloud.com/maxximdj'},
  {id:'gydra',name:'Gydra',genres:['Drum & Bass'],tagline:'Menfort & Bes · Drum & Bass',description:'Drum & Bass-дуэт Menfort и Bes. В подтверждённом профиле проекта на SoundCloud представлены участники и музыка Gydra.',photo:'experts/IMG_8374.JPG',photoPosition:'50% 35%',source:'https://soundcloud.com/gydramusic'},
  {id:'alexander-popov',name:'Alexander Popov',genres:['Trance','Uplifting Trance'],tagline:'Interplay · Trance · Uplifting',description:'DJ и продюсер, автор альбома Reflected. Выпускает Interplay Radioshow. Направления для будущей экспертизы — Trance и Uplifting Trance.',photo:'experts/alexander-popov.jpg',source:'https://soundcloud.com/popovmusic'},
+ {id:'fonarev',name:'Fonarev',genres:['Progressive House','Trance'],tagline:'Digital Emotion · Progressive / Trance',description:'DJ и продюсер, руководитель Digital Emotions. Направления для будущей экспертизы — Progressive и Trance. Участие в платформе пока не подтверждено.',photo:'experts/fonarev.jpg',photoPosition:'50% 30%',source:'https://soundcloud.com/fonarev'},
  {id:'deflee',name:'DEFLEE',genres:['Indie Dance'],tagline:'DJ / продюсер · Indie Dance',description:'DJ и продюсер. Направление для будущей экспертизы — Indie Dance: характер трека, грув и клубное звучание. Музыка и сеты артиста доступны в его профиле SoundCloud.',photo:'experts/deflee.jpg',source:'https://soundcloud.com/user-14520440'},
 ];
 
@@ -27,3 +28,9 @@ export function demoExpert(genre:string):Expert {
 }
 export type Stage = 'checkout' | 'paid' | 'submitted' | 'reviewed' | 'questions' | 'complete';
 export function nextStage(stage:Stage):Stage {return ({checkout:'paid',paid:'submitted',submitted:'reviewed',reviewed:'questions',questions:'complete',complete:'complete'} as const)[stage];}
+
+// Только локальная демонстрация скидки; не проверяет реальные промокоды.
+export const DEMO_PRICE = 1990;
+export function demoPromoPrice(code:string):number|null {
+ return code.trim().toUpperCase()==='DEMO10' ? Math.round(DEMO_PRICE * .9) : null;
+}

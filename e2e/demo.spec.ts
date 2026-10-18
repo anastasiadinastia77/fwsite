@@ -41,9 +41,36 @@ test('мобильный экран и навигация',async({page})=>{
 test('настольный экран',async({page})=>{await page.setViewportSize({width:1440,height:1000});await page.goto('/');
  await expect(page.locator('.record-art')).toHaveCount(0);
  const portraits=page.locator('.expert-portrait img');
- await expect(portraits).toHaveCount(5);
+ await expect(portraits).toHaveCount(6);
  for(const image of await portraits.all()){
   await image.scrollIntoViewIfNeeded();
   await expect.poll(()=>image.evaluate((el:HTMLImageElement)=>el.complete&&el.naturalWidth>0)).toBe(true);
  }
  await page.screenshot({path:'artifacts/desktop.png',fullPage:true});});
+
+test('промокод меняет демо-сумму и сбрасывается с новым заказом',async({page})=>{
+ await page.goto('/');
+ await page.locator('.hero').getByRole('button',{name:'Попробовать демо'}).click();
+ await page.getByLabel('Промокод').fill('unknown');
+ await page.getByRole('button',{name:'Применить',exact:true}).click();
+ await expect(page.locator('#promo-status')).toContainText('Промокод не найден');
+ await expect(page.locator('.order-total')).toContainText('1 990 ₽');
+ await page.getByLabel('Промокод').fill(' demo10 ');
+ await page.getByLabel('Промокод').press('Enter');
+ await expect(page.locator('#promo-status')).toContainText('скидка 10%');
+ await expect(page.getByRole('button',{name:'Симулировать оплату · 1 791 ₽',exact:true})).toBeVisible();
+ await expect(page.locator('input[type=file]')).toHaveCount(0);
+ await page.getByLabel('Промокод').fill('changed');
+ await expect(page.getByRole('button',{name:'Симулировать оплату · 1 990 ₽',exact:true})).toBeVisible();
+ await page.getByLabel('Промокод').fill('DEMO10');
+ await page.getByRole('button',{name:'Применить',exact:true}).click();
+ await page.getByLabel('Псевдоним').fill('Demo');
+ await page.getByLabel('Название трека').fill('Track');
+ await page.getByLabel('Тестовый контакт').fill('@demo');
+ await page.getByRole('button',{name:'Симулировать оплату · 1 791 ₽',exact:true}).click();
+ await expect(page.locator('.order-meta')).toContainText('1 791 ₽ · промокод DEMO10');
+ await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+ await page.locator('.hero').getByRole('button',{name:'Попробовать демо'}).click();
+ await expect(page.getByLabel('Промокод')).toHaveValue('');
+ await expect(page.getByRole('button',{name:'Симулировать оплату · 1 990 ₽',exact:true})).toBeVisible();
+});
