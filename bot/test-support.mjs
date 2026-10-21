@@ -2,14 +2,14 @@ import { Store } from './store.mjs';
 import { BotApp } from './app.mjs';
 
 // Deliberately fictional identities and an unreachable example domain. No network transport.
-export function fixture(path = ':memory:') {
+export function fixture(path = ':memory:', { isTest = false } = {}) {
   const store = new Store(path);
   let now = Date.UTC(2026, 9, 21, 12);
   let updateId = Number(store.getMeta('offset') ?? 0);
   const app = new BotApp(store, () => now, 'Тестовая платформа');
   store.addExpert(1001, 'Демо-эксперт');
   const created = store.createOrder({ expertId: 1001, title: 'Тестовый трек',
-    trackUrl: 'https://example.invalid/private-demo', priceRub: 1990, now });
+    trackUrl: isTest ? undefined : 'https://example.invalid/private-demo', priceRub: 1990, isTest, now });
   const sent = [];
   const api = { async call(method, payload) { sent.push({ method, ...payload }); return { message_id: sent.length }; } };
   const message = (actorId, payload) => app.process({ update_id: updateId++, message: {

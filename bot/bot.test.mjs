@@ -46,6 +46,37 @@ test('onboarding gives a user their own Telegram ID without granting expert acce
   assert.equal(f.store.expert(3001), undefined);
 });
 
+test('operator-created test order completes without a payment and labels messages as a test', async t => {
+  const f = fixture(':memory:', { isTest: true }); t.after(() => f.store.close());
+  assert.equal(f.get().paid, false); assert.equal(f.get().priceRub, 0); assert.equal(f.get().trackUrl, null);
+  assert.throws(() => f.app.confirmPayment(f.order.id), /тестовый заказ/);
+  f.message(1001, { text: `/start ${f.invite}` });
+  assert.equal(f.get().clientId, null);
+  f.message(2001, { text: `/start ${f.invite}` });
+  assert.equal(f.store.ordersFor(1001).length, 1);
+  f.click(1001, 'review'); f.message(1001, { voice: { file_id: 'test-voice' } }); await f.app.flush(f.api);
+  f.click(2001, 'ask'); f.message(2001, { text: 'Тестовый вопрос' }); f.click(2001, 'submit');
+  f.click(1001, 'answer'); f.message(1001, { text: 'Тестовый ответ' }); await f.app.flush(f.api);
+  f.click(1001, 'finish'); f.click(1001, 'work'); f.click(1001, 's_refinement'); f.click(1001, 'offer');
+  await f.app.flush(f.api); f.click(2001, 'interest'); await f.app.flush(f.api);
+  assert.equal(f.get().status, 'completed'); assert.equal(f.get().interested, true); assert.equal(f.get().paid, false);
+  assert.ok(f.sent.some(m => m.chat_id === 2001 && m.text?.includes('ТЕСТ — заказ')));
+  assert.ok(f.sent.some(m => m.chat_id === 2001 && m.text?.includes('ТЕСТ — предложение')));
+  assert.ok(f.sent.some(m => m.chat_id === 2001 && m.text?.includes('реальные услуги не заказаны')));
+  assert.equal(f.sent.some(m => m.text?.includes('Оплата заказа')), false);
+});
+
+test('client commands and callback payloads cannot turn a real unpaid order into a test', async t => {
+  const f = fixture(); t.after(() => f.store.close());
+  f.message(2001, { text: `/start ${f.invite}` });
+  f.message(2001, { text: '/test' }); f.click(2001, 'test'); f.click(1001, 'review');
+  f.message(1001, { voice: { file_id: 'must-not-be-sent' } }); await f.app.flush(f.api);
+  assert.equal(f.get().isTest, false); assert.equal(f.get().paid, false);
+  assert.equal(f.sent.some(m => m.method === 'sendVoice'), false);
+  assert.throws(() => f.store.createOrder({ expertId: 1001, title: 'No track', priceRub: 1990 }));
+  assert.throws(() => f.store.createOrder({ expertId: 1001, title: 'Bad test', isTest: true, paid: true }), /cannot record/);
+});
+
 test('unpaid track never reaches the expert; only trusted operator confirmation releases it', async t => {
   const f = fixture(); t.after(() => f.store.close());
   f.message(2001, { text: `/start ${f.invite}` });
@@ -246,6 +277,11 @@ test('server admin commands create unpaid orders and require an explicit receipt
     assert.equal(admin(['payment:confirm', '--id', id, '--receipt-checked']).status, 0);
     const store = new Store(env.BOT_DB_PATH);
     try { assert.equal(store.order(id).paid, true); } finally { store.close(); }
+    const demo = admin(['order:create', '--expert', '1001', '--title', 'ТЕСТ', '--test', '--bot-name', 'example_bot']);
+    assert.equal(demo.status, 0);
+    assert.ok(demo.stdout.includes('TEST — NO PAYMENT'));
+    const demoId = /Order: ([a-f0-9]{12})/.exec(demo.stdout)[1];
+    assert.equal(admin(['payment:confirm', '--id', demoId, '--receipt-checked']).status, 1);
     const disabled = spawnSync(process.execPath, ['bot/run.mjs'], { env, encoding: 'utf8' });
     assert.equal(disabled.status, 1);
     assert.ok(disabled.stderr.includes('Live bot is disabled'));

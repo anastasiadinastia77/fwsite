@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
+import { hasReviewAccess } from './domain.mjs';
 
 export const tokenHash = token => createHash('sha256').update(token).digest('hex');
 
@@ -37,17 +38,20 @@ export class Store {
   save(order) { this.db.prepare('UPDATE orders SET data=? WHERE id=?').run(JSON.stringify(order), order.id); }
   ordersFor(id) {
     return this.db.prepare('SELECT data FROM orders ORDER BY rowid DESC').all().map(row => JSON.parse(row.data))
-      .filter(o => o.clientId === id || (o.paid && o.clientId && o.expertId === id));
+      .filter(o => o.clientId === id || (hasReviewAccess(o) && o.clientId && o.expertId === id));
   }
-  createOrder({ expertId, title, trackUrl, paid = false, priceRub, now = Date.now() }) {
+  createOrder({ expertId, title, trackUrl = null, paid = false, priceRub, isTest = false, now = Date.now() }) {
     if (!this.expert(expertId)) throw new Error('Register the confirmed expert first');
     if (typeof title !== 'string' || !title.trim() || title.length > 150) throw new Error('Title required (max 150 characters)');
-    const url = new URL(trackUrl);
-    if (url.protocol !== 'https:' || url.username || url.password || trackUrl.length > 1500) throw new Error('Use a private HTTPS track link without embedded credentials');
-    if (!Number.isSafeInteger(priceRub) || priceRub <= 0) throw new Error('Agreed client price in whole rubles required');
+    if (typeof isTest !== 'boolean' || (isTest && paid)) throw new Error('Test orders cannot record a real payment');
+    if (!isTest || trackUrl) {
+      const url = new URL(trackUrl);
+      if (url.protocol !== 'https:' || url.username || url.password || trackUrl.length > 1500) throw new Error('Use a private HTTPS track link without embedded credentials');
+    }
+    if (!isTest && (!Number.isSafeInteger(priceRub) || priceRub <= 0)) throw new Error('Agreed client price in whole rubles required');
     const invite = randomBytes(24).toString('base64url');
     const order = { id: randomBytes(6).toString('hex'), expertId, clientId: null, title: title.trim(), trackUrl,
-      paid: Boolean(paid), priceRub, status: 'awaiting_review', createdAt: now, updatedAt: now };
+      paid: Boolean(paid), priceRub: isTest ? 0 : priceRub, isTest, status: 'awaiting_review', createdAt: now, updatedAt: now };
     this.db.prepare('INSERT INTO orders VALUES (?,?,?)').run(order.id, JSON.stringify(order), tokenHash(invite));
     return { order, invite };
   }

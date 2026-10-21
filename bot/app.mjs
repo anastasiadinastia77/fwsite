@@ -1,4 +1,4 @@
-import { canAsk, canFinish, changeOrder, delivered, offerText, QUESTION_WINDOW_MS, requireThat, SERVICES, serviceKeys, UserError } from './domain.mjs';
+import { canAsk, canFinish, changeOrder, delivered, hasReviewAccess, offerText, QUESTION_WINDOW_MS, requireThat, SERVICES, serviceKeys, UserError } from './domain.mjs';
 
 const button = (order, text, action) => ({ text, callback_data: `o:${order.id}:${action}` });
 const keyboard = rows => ({ inline_keyboard: rows });
@@ -40,16 +40,19 @@ export class BotApp {
       offer_queued: 'Доставляем предложение.', completed: 'Разбор завершён.',
     };
     const isExpert = order.expertId === actorId;
-    const detail = isExpert && order.paid && order.clientId ? `\nТрек: ${order.trackUrl}` : '';
+    const detail = isExpert && hasReviewAccess(order) && order.clientId
+      ? (order.trackUrl ? `\nТрек: ${order.trackUrl}` : '\nТест без трека: запиши любое короткое пробное голосовое сообщение.') : '';
     const questions = isExpert && order.questions?.length ? `\n\nВопросы клиента:\n${order.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : '';
     const deadline = order.reviewedAt && order.status === 'reviewed'
       ? `\nВопросы принимаются до ${new Date(order.reviewedAt + QUESTION_WINDOW_MS).toISOString().replace('T', ' ').slice(0, 16)} UTC.` : '';
-    this.say(actorId, `Заказ ${order.id} · ${order.title}\n${order.paid ? statuses[order.status] : 'Ожидаем подтверждение оплаты.'}${detail}${questions}${deadline}`,
-      order.paid ? this.controls(order, actorId) : []);
+    this.say(actorId, `${order.isTest ? 'ТЕСТ — без оплаты. Реальные услуги не заказываются.\n\n' : ''}Заказ ${order.id} · ${order.title}\n${hasReviewAccess(order) ? statuses[order.status] : 'Ожидаем подтверждение оплаты.'}${detail}${questions}${deadline}`,
+      hasReviewAccess(order) ? this.controls(order, actorId) : []);
   }
-  paidOrderReady(order) {
-    if (order.paid && order.clientId) {
-      this.say(order.clientId, `Оплата заказа «${order.title}» подтверждена. Трек передан выбранному эксперту.`);
+  orderReady(order) {
+    if (hasReviewAccess(order) && order.clientId) {
+      this.say(order.clientId, order.isTest
+        ? `ТЕСТ — заказ «${order.title}» подключён без оплаты. Эксперт отправит пробное голосовое сообщение. Реальные услуги не заказываются.`
+        : `Оплата заказа «${order.title}» подтверждена. Трек передан выбранному эксперту.`);
       this.showOrder(order, order.expertId);
     }
   }
@@ -57,10 +60,11 @@ export class BotApp {
     return this.store.transaction(() => {
       const order = this.store.order(orderId);
       requireThat(order && !order.paid, 'Заказ не найден или оплата уже подтверждена.');
+      requireThat(!order.isTest, 'Это тестовый заказ без оплаты. Подтверждать платёж для него нельзя.');
       order.paid = true;
       order.updatedAt = this.clock();
       this.store.save(order);
-      this.paidOrderReady(order);
+      this.orderReady(order);
     });
   }
   process(update) {
@@ -70,7 +74,7 @@ export class BotApp {
       if (update.update_id < offset) return;
       const message = update.message ?? update.callback_query?.message;
       const actorId = (update.callback_query?.from ?? update.message?.from)?.id;
-      // No group chats, forwarded commands, or identity inferred from a callback payload.
+      // No group chats or identity inferred from a callback payload.
       if (message?.chat?.type === 'private' && message.chat.id === actorId && Number.isSafeInteger(actorId) && actorId > 0) {
         try {
           if (update.callback_query) this.callback(actorId, update.callback_query.data);
@@ -93,7 +97,7 @@ export class BotApp {
         const order = this.store.bindClient(token, actorId);
         requireThat(order, 'Приглашение уже использовано или недействительно. Твои заказы: /orders.');
         this.say(actorId, `Ты подключён к заказу «${order.title}». Здесь будут разбор и вопросы. Личные сообщения не публикуются.`);
-        this.paidOrderReady(order);
+        this.orderReady(order);
         this.showOrder(order, actorId);
       } else this.say(actorId, `${this.brand}\n\nДля клиента: открой личную ссылку заказа от платформы. Для подключённого эксперта: /orders.\n\n/id — мой Telegram ID для подключения эксперта\n/help — инструкция, /cancel — отменить ввод.`);
       return;
@@ -151,7 +155,7 @@ export class BotApp {
     const [, id, action] = match;
     const order = this.store.order(id);
     requireThat(order && (order.clientId === actorId || order.expertId === actorId), 'Этот заказ недоступен.');
-    requireThat(order.paid && order.clientId, 'Заказ пока недоступен.');
+    requireThat(hasReviewAccess(order) && order.clientId, 'Заказ пока недоступен.');
     const expert = order.expertId === actorId;
     const clientActions = ['ask', 'submit', 'skip', 'interest'];
     if (action !== 'open') requireThat(clientActions.includes(action) ? !expert : expert, 'Это действие недоступно.');
@@ -219,8 +223,8 @@ export class BotApp {
       this.say(order.clientId, `Разбор «${order.title}» завершён. Спасибо!`);
       this.say(actorId, 'Разбор завершён без предложения услуг.');
     } else if (action === 'interest') {
-      this.say(order.expertId, `Клиент хочет узнать условия по заказу ${id} «${order.title}»:\n${order.services.map(s => SERVICES[s]).join(', ')}.\nПлатформа согласует задачу, стоимость и сроки отдельно.`);
-      this.say(actorId, 'Запрос передан. Платформа согласует с тобой задачу, стоимость и сроки. Новой оплаты сейчас нет.');
+      this.say(order.expertId, `${order.isTest ? 'ТЕСТ — пробный запрос, реальные услуги не заказываются.\n\n' : ''}Клиент хочет узнать условия по заказу ${id} «${order.title}»:\n${order.services.map(s => SERVICES[s]).join(', ')}.\nПлатформа согласует задачу, стоимость и сроки отдельно.`);
+      this.say(actorId, order.isTest ? 'ТЕСТ — запрос передан. Проверка бота завершена, реальные услуги не заказаны.' : 'Запрос передан. Платформа согласует с тобой задачу, стоимость и сроки. Новой оплаты сейчас нет.');
     } else this.showOrder(next, actorId);
   }
   preview(order, actorId) {

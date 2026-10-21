@@ -16,6 +16,8 @@ export const serviceKeys = verdict => verdict === 'ready'
 
 export class UserError extends Error {}
 export const requireThat = (condition, message) => { if (!condition) throw new UserError(message); };
+// Only the trusted server operator can create a test order. It never records a payment.
+export const hasReviewAccess = order => order.paid === true || order.isTest === true;
 export const canAsk = (order, now) => order.status === 'reviewed' && now < order.reviewedAt + QUESTION_WINDOW_MS;
 export const canFinish = (order, now) => order.status === 'ready_finish'
   || (order.status === 'reviewed' && !canAsk(order, now));
@@ -25,7 +27,7 @@ export function changeOrder(current, actorId, action, data = {}, now = Date.now(
   const clientActions = ['questions', 'skip', 'interest'];
   const owner = clientActions.includes(action) ? order.clientId : order.expertId;
   requireThat(actorId === owner, 'Этот заказ недоступен.');
-  requireThat(order.paid && order.clientId, 'Заказ ещё не готов: нужны подтверждение оплаты и подключение клиента.');
+  requireThat(hasReviewAccess(order) && order.clientId, 'Заказ ещё не готов: нужны подтверждение оплаты и подключение клиента.');
   switch (action) {
     case 'review':
       requireThat(order.status === 'awaiting_review', 'Разбор уже отправлен или ожидает доставки.');
@@ -112,5 +114,5 @@ export function delivered(current, kind, now = Date.now()) {
 }
 
 export function offerText(order) {
-  return `Следующий шаг для «${order.title}»\n\n${order.verdict === 'ready' ? 'Эксперт считает трек готовым к отправке на лейблы.' : 'Эксперт рекомендует доработать трек.'}\n\n${order.services.map(s => `• ${SERVICES[s]}`).join('\n')}${order.note ? `\n\n${order.note}` : ''}\n\nЭто отдельные, необязательные услуги. Стоимость и сроки согласуем до нового заказа. Личная рекомендация не гарантирует ответ или контракт с лейблом.`;
+  return `${order.isTest ? 'ТЕСТ — предложение для проверки бота, без заказа реальных услуг.\n\n' : ''}Следующий шаг для «${order.title}»\n\n${order.verdict === 'ready' ? 'Эксперт считает трек готовым к отправке на лейблы.' : 'Эксперт рекомендует доработать трек.'}\n\n${order.services.map(s => `• ${SERVICES[s]}`).join('\n')}${order.note ? `\n\n${order.note}` : ''}\n\nЭто отдельные, необязательные услуги. Стоимость и сроки согласуем до нового заказа. Личная рекомендация не гарантирует ответ или контракт с лейблом.`;
 }
