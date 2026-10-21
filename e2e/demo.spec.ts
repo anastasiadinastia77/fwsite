@@ -19,7 +19,7 @@ test('полный демо-заказ без отправки данных',asy
  await page.locator('input[type=file]').setInputFiles({name:'demo.mp3',mimeType:'audio/mpeg',buffer:Buffer.from('demo')});
  await page.getByRole('button',{name:'Симулировать передачу'}).click();
  await page.getByRole('button',{name:'Симулировать голосовой'}).click();
- await page.getByLabel('Вопрос 1').fill('Что изменить в аранжировке?');
+ await page.getByLabel('Вопросы эксперту').fill('1. Что изменить в аранжировке?\n2. Какой баланс баса?\n3. Что улучшить в сведении?\n4. Какой референс выбрать?\n5. Готов ли трек к лейблам?');
  await page.getByRole('button',{name:'Симулировать отправку'}).click();
  await expect(page.getByText('Раунд использован')).toBeVisible();
  await expect(page.locator('textarea')).toHaveCount(0);

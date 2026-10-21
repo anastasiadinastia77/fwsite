@@ -192,18 +192,65 @@ test('full flow: voice review, two questions, expert voice answer, explicit reco
   assert.equal(f.sent.filter(m => m.chat_id === 1001 && m.text?.includes('Клиент хочет узнать условия')).length, 1);
 });
 
-test('question drafts are limited to two, submitted once, cannot use another order draft', async t => {
+test('up to five text questions are submitted once and cannot use another order draft', async t => {
   const f = fixture(); t.after(() => f.store.close()); await f.reviewed();
   f.click(2001, 'ask');
-  f.message(2001, { text: 'Первый' }); f.message(2001, { text: 'Второй' }); f.message(2001, { text: 'Третий' });
-  assert.equal(f.store.session(2001).questions.length, 2);
+  for (let i = 1; i <= 6; i++) f.message(2001, { text: `Вопрос ${i}` });
+  assert.equal(f.store.session(2001).questions.length, 5);
   const other = f.store.createOrder({ expertId: 1001, title: 'Другой', trackUrl: 'https://example.invalid/other', priceRub: 2000, paid: true });
   f.message(2001, { text: `/start ${other.invite}` });
   f.click(2001, 'submit', other.order.id);
   assert.equal(f.store.order(other.order.id).status, 'awaiting_review');
   f.click(2001, 'submit'); f.click(2001, 'ask'); f.click(2001, 'submit');
-  assert.deepEqual(f.get().questions, ['Первый', 'Второй']);
+  assert.deepEqual(f.get().questions, ['Вопрос 1', 'Вопрос 2', 'Вопрос 3', 'Вопрос 4', 'Вопрос 5']);
   assert.equal(f.get().status, 'questions_pending');
+});
+
+test('one voice round is sent only to the assigned expert and delivered before they can answer', async t => {
+  const f = fixture(); t.after(() => f.store.close()); await f.reviewed();
+  f.sent.length = 0; f.click(2001, 'ask');
+  f.message(2001, { voice: { file_id: 'client-round', duration: 181 } });
+  assert.equal(f.store.session(2001).questionVoice.fileId, 'client-round');
+  assert.equal(f.get().status, 'reviewed');
+  f.click(2001, 'submit'); assert.equal(f.get().status, 'questions_queued');
+  f.click(1001, 'answer'); assert.equal(f.store.session(1001), undefined);
+  f.click(3001, 'answer');
+  await f.app.flush(f.api);
+  assert.equal(f.get().status, 'questions_pending');
+  assert.equal(f.get().questionVoice.durationSeconds, 181);
+  const delivered = f.sent.filter(m => m.voice === 'client-round');
+  assert.equal(delivered.length, 1); assert.equal(delivered[0].chat_id, 1001);
+  f.click(2001, 'ask'); f.click(2001, 'submit'); await f.app.flush(f.api);
+  assert.equal(f.sent.filter(m => m.voice === 'client-round').length, 1);
+  f.click(1001, 'answer'); f.message(1001, { text: 'Ответ на голосовой раунд' }); await f.app.flush(f.api);
+  assert.equal(f.get().status, 'ready_finish');
+});
+
+test('voice drafts can be replaced, are not mixed with text, and text stays within the Telegram size limit', async t => {
+  const f = fixture(); t.after(() => f.store.close()); await f.reviewed(); f.click(2001, 'ask');
+  f.message(2001, { voice: { file_id: 'first-voice', duration: 45 } });
+  f.message(2001, { voice: { file_id: 'last-voice', duration: 90 } }); f.message(2001, { text: 'Не добавлять к голосовому' });
+  assert.equal(f.store.session(2001).questionVoice.fileId, 'last-voice');
+  assert.deepEqual(f.store.session(2001).questions, []);
+  f.click(2001, 'ask');
+  for (let i = 0; i < 4; i++) f.message(2001, { text: 'x'.repeat(1000) });
+  f.message(2001, { voice: { file_id: 'do-not-overwrite-text', duration: 45 } });
+  assert.equal(f.store.session(2001).questions.length, 3);
+  assert.equal(f.store.session(2001).questionVoice, undefined);
+  f.click(2001, 'submit'); await f.app.flush(f.api);
+  assert.equal(f.get().questions.join('').length, 3000);
+  assert.ok(f.sent.every(m => !m.text || m.text.length <= 4096));
+});
+
+test('a failed voice-round delivery is retried without completing the round prematurely', async t => {
+  const f = fixture(); t.after(() => f.store.close()); await f.reviewed(); f.click(2001, 'ask');
+  f.message(2001, { voice: { file_id: 'retry-questions', duration: 120 } }); f.click(2001, 'submit');
+  await f.app.flush({ async call(method) { if (method === 'sendVoice') throw new Error('offline'); return { message_id: 100 }; } });
+  assert.equal(f.get().status, 'questions_queued');
+  f.click(1001, 'finish'); assert.equal(f.get().status, 'questions_queued');
+  f.advance(1000); await f.app.flush(f.api);
+  assert.equal(f.get().status, 'questions_pending');
+  assert.equal(f.sent.filter(m => m.voice === 'retry-questions').length, 1);
 });
 
 test('72 hours are enforced at submit, from successful delivery rather than queue time', async t => {

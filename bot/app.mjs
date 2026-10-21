@@ -1,4 +1,4 @@
-import { canAsk, canFinish, changeOrder, delivered, hasReviewAccess, offerText, QUESTION_WINDOW_MS, requireThat, SERVICES, serviceKeys, UserError } from './domain.mjs';
+import { canAsk, canFinish, changeOrder, delivered, hasReviewAccess, MAX_QUESTIONS, MAX_QUESTION_CHARS, MAX_QUESTION_ROUND_CHARS, offerText, QUESTION_WINDOW_MS, requireThat, SERVICES, serviceKeys, UserError } from './domain.mjs';
 
 const button = (order, text, action) => ({ text, callback_data: `o:${order.id}:${action}` });
 const keyboard = rows => ({ inline_keyboard: rows });
@@ -39,7 +39,7 @@ export class BotApp {
     ]);
   }
   showHelp(actorId) {
-    this.say(actorId, 'Как проходит разбор\n\n1. После оплаты эксперт получает твой трек.\n2. Слушает его и присылает личный голосовой разбор.\n3. Ты можешь задать до двух вопросов одним раундом в течение 72 часов — или нажать «Всё понятно».\n\nДальнейшие услуги обсуждаются отдельно, по твоему желанию. В демо можно пройти весь путь без оплаты.', [[menuButton]]);
+    this.say(actorId, 'Как проходит разбор\n\n1. После оплаты эксперт получает твой трек.\n2. Слушает его и присылает личный голосовой разбор.\n3. В течение 72 часов ты можешь прислать один раунд до пяти вопросов: текстом или одним голосовым. Можно сразу нажать «Всё понятно».\n\nДальнейшие услуги обсуждаются отдельно, по твоему желанию. В демо можно пройти весь путь без оплаты.', [[menuButton]]);
   }
   controls(order, actorId) {
     const expert = order.expertId === actorId;
@@ -83,6 +83,7 @@ export class BotApp {
       review_queued: 'Передаём голосовой разбор клиенту.',
       reviewed: canAsk(order, this.clock()) ? 'Клиент получил разбор. Теперь он может задать вопросы или нажать «Всё понятно».'
         : 'Время для уточнений истекло. Подведи итог разбора.',
+      questions_queued: 'Передаём голосовое с вопросами клиента.',
       questions_pending: 'Клиент прислал уточнения. Ответь на них одним голосовым или текстовым сообщением.',
       answer_queued: 'Передаём твой ответ клиенту.',
       ready_finish: 'Уточнения завершены. Подведи итог и выбери следующий шаг для трека.',
@@ -95,8 +96,9 @@ export class BotApp {
     const clientStatuses = {
       awaiting_review: 'Заказ у эксперта. Здесь появится твой голосовой разбор, а после него можно будет задать вопросы.',
       review_queued: 'Голосовой разбор готов — сейчас он появится здесь.',
-      reviewed: canAsk(order, this.clock()) ? 'Послушай голосовое сообщение выше. Есть вопросы? Отправь один или два одним раундом — либо нажми «Всё понятно».'
+      reviewed: canAsk(order, this.clock()) ? 'Послушай голосовое сообщение выше. Есть вопросы? Пришли один раунд до пяти вопросов: текстом или одним голосовым. Либо нажми «Всё понятно».'
         : 'Время для уточнений истекло. Эксперт подведёт итог разбора.',
+      questions_queued: 'Передаём твой голосовой раунд эксперту. Его ответ появится здесь.',
       questions_pending: 'Твои вопросы у эксперта. Его ответ появится здесь.',
       answer_queued: 'Эксперт ответил — сейчас сообщение появится здесь.',
       ready_finish: 'Ответ на уточнения получен. Эксперт подведёт итог разбора.',
@@ -107,7 +109,8 @@ export class BotApp {
     };
     const expertName = this.store.expert(order.expertId)?.name ?? 'Твой эксперт';
     const status = hasReviewAccess(order) ? (isExpert ? expertStatuses : clientStatuses)[order.status] : 'Ждём подтверждения оплаты. После неё эксперт получит трек.';
-    const questions = isExpert && order.questions?.length ? `\n\nВопросы клиента:\n${order.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : '';
+    const questions = isExpert && order.questionVoice ? '\n\nВопросы клиента — в голосовом сообщении выше.'
+      : isExpert && order.questions?.length ? `\n\nВопросы клиента:\n${order.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : '';
     const deadline = order.reviewedAt && order.status === 'reviewed'
       ? `\n\nУточнения доступны до ${deadlineText(order)}.` : '';
     this.say(actorId, `${order.isTest ? 'Демо · без оплаты\n\n' : ''}${orderTitle(order)}${!isExpert ? `\nЭксперт: ${expertName}` : ''}\n\n${status}${questions}${deadline}`, [
@@ -199,15 +202,36 @@ export class BotApp {
       this.store.setSession(actorId, null);
     } else if (session.kind === 'questions') {
       requireThat(order.clientId === actorId && canAsk(order, this.clock()), 'Раунд вопросов уже использован или 72 часа истекли.');
-      requireThat(text && !text.startsWith('/') && text.length <= 1000, 'Вопрос отправь текстом, до 1 000 знаков.');
-      if (session.questions.length >= 2) {
-        this.say(actorId, 'Уже записано два вопроса. Отправить их эксперту?', [[button(order, 'Отправить эксперту', 'submit')], [button(order, 'Отменить', 'open')]]);
+      const draftButtons = [[button(order, 'Отправить эксперту', 'submit')], [button(order, 'Записать заново', 'ask')], [button(order, 'Отменить', 'open')]];
+      if (message.voice) {
+        if (session.questions.length) {
+          this.say(actorId, 'Текстовые вопросы уже записаны. Отправь их или нажми «Записать заново», чтобы заменить раунд голосовым.', draftButtons);
+          return;
+        }
+        requireThat(typeof message.voice.file_id === 'string' && message.voice.file_id.length > 0
+          && Number.isSafeInteger(message.voice.duration) && message.voice.duration >= 0, 'Не удалось прочитать голосовое. Запиши его ещё раз.');
+        session.questionVoice = { fileId: message.voice.file_id, durationSeconds: message.voice.duration };
+        this.store.setSession(actorId, session);
+        this.say(actorId, 'Голосовое с вопросами записано. Отправить эксперту?', draftButtons);
+        return;
+      }
+      if (session.questionVoice) {
+        this.say(actorId, 'Голосовой раунд уже записан. Можно отправить его или записать заново.', draftButtons);
+        return;
+      }
+      requireThat(text && !text.startsWith('/') && text.length <= MAX_QUESTION_CHARS, 'Пришли вопрос текстом до 1 000 знаков или запиши один голосовой раунд.');
+      if (session.questions.length >= MAX_QUESTIONS) {
+        this.say(actorId, 'Пять вопросов уже записаны. Отправить их эксперту?', draftButtons);
+        return;
+      }
+      if (session.questions.join('').length + text.length > MAX_QUESTION_ROUND_CHARS) {
+        this.say(actorId, 'На весь текстовый раунд — до 3 000 знаков. Сократи вопрос или отправь уже записанные.', draftButtons);
         return;
       }
       session.questions.push(text);
       this.store.setSession(actorId, session);
-      this.say(actorId, session.questions.length === 1 ? 'Первый вопрос записан. Напиши второй или отправь один.' : 'Два вопроса записаны. Отправить эксперту?',
-        [[button(order, 'Отправить эксперту', 'submit')], [button(order, 'Отменить', 'open')]]);
+      this.say(actorId, session.questions.length === MAX_QUESTIONS ? 'Пять вопросов записаны. Отправить эксперту?'
+        : `Записано вопросов: ${session.questions.length} из ${MAX_QUESTIONS}. Можешь добавить ещё или отправить раунд.`, draftButtons);
     } else if (session.kind === 'note') {
       const next = changeOrder(order, actorId, 'note', { text }, this.clock());
       this.store.save(next);
@@ -240,24 +264,27 @@ export class BotApp {
       this.store.setSession(actorId, { orderId: id, kind: action });
       this.say(actorId, action === 'review'
         ? `${orderTitle(order)}\n\nЗапиши голосовое сообщение прямо в этот чат.${order.isTest ? ' Для проверки хватит нескольких секунд.' : ' Ориентир — 2–4 минуты: что работает и что доработать.'}`
-        : `Ответ на уточнения\n\n${order.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\nПришли один голосовой или текстовый ответ на уточнения.`,
+        : `Ответ на уточнения\n\n${order.questionVoice ? 'Послушай голосовое с вопросами клиента выше.' : (order.questions ?? []).map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\nПришли один голосовой или текстовый ответ на уточнения.`,
       [[button(order, 'Отменить', 'open')]]);
       return;
     }
     if (action === 'ask') {
       requireThat(canAsk(order, this.clock()), 'Раунд вопросов уже использован или 72 часа истекли.');
       this.store.setSession(actorId, { orderId: id, kind: 'questions', questions: [] });
-      this.say(actorId, 'Напиши первый вопрос одним сообщением. Затем можно добавить второй или сразу отправить эксперту.', [[button(order, 'Отменить', 'open')]]);
+      this.say(actorId, 'Собери до пяти вопросов в один раунд. Запиши одно голосовое или пришли вопросы текстом, каждый отдельным сообщением. Затем нажми «Отправить эксперту».', [[button(order, 'Отменить', 'open')]]);
       return;
     }
     if (action === 'submit') {
       const session = this.store.session(actorId);
       requireThat(session?.orderId === id && session.kind === 'questions', 'Сначала запиши вопросы для этого заказа.');
-      const next = changeOrder(order, actorId, 'questions', { questions: session.questions }, this.clock());
+      const next = changeOrder(order, actorId, 'questions', { questions: session.questions, questionVoice: session.questionVoice }, this.clock());
       this.store.save(next);
       this.store.setSession(actorId, null);
       this.showOrder(next, actorId);
-      this.showOrder(next, order.expertId);
+      if (next.questionVoice) {
+        this.store.enqueue(order.expertId, 'sendVoice', { voice: next.questionVoice.fileId, protect_content: true },
+          { orderId: id, kind: 'questions', clientStatusMessageId: this.replyTo?.messageId });
+      } else this.showOrder(next, order.expertId);
       return;
     }
     if (['preview', 'note', 'verdict', 'edit', 'endorse'].includes(action)) {
@@ -330,7 +357,15 @@ export class BotApp {
         if (!row.delivery) return;
         const order = delivered(this.store.order(row.delivery.orderId), row.delivery.kind, this.clock());
         this.store.save(order);
-        if (row.delivery.kind !== 'offer') this.showOrder(order, order.clientId);
+        if (row.delivery.kind !== 'offer') {
+          const previousReply = this.replyTo;
+          try {
+            if (row.delivery.kind === 'questions' && Number.isSafeInteger(row.delivery.clientStatusMessageId)) {
+              this.replyTo = { chatId: order.clientId, messageId: row.delivery.clientStatusMessageId };
+            }
+            this.showOrder(order, order.clientId);
+          } finally { this.replyTo = previousReply; }
+        }
         this.showOrder(order, order.expertId);
       });
     }

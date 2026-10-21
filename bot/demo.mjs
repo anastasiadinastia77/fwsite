@@ -4,9 +4,9 @@ const f = fixture();
 try {
   await f.reviewed();
   f.click(2001, 'ask');
-  f.message(2001, { text: 'Что доработать в треке?' });
-  f.message(2001, { text: 'Как подготовить демо для лейбла?' });
+  f.message(2001, { voice: { file_id: 'fictional-questions-voice', duration: 90 } });
   f.click(2001, 'submit');
+  await f.app.flush(f.api);
   f.click(1001, 'answer');
   f.message(1001, { voice: { file_id: 'fictional-followup-voice' } });
   await f.app.flush(f.api);
@@ -21,5 +21,5 @@ try {
     console.log('');
   }
   if (f.get().status !== 'completed' || !f.get().interested) throw new Error('Demo did not complete');
-  console.log('PASS: paid order → voice review → 2 questions → voice answer → refinement proposal → request for terms');
+  console.log('PASS: paid order → voice review → one round of up to 5 questions → voice answer → refinement proposal → request for terms');
 } finally { f.store.close(); }

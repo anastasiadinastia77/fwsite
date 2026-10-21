@@ -1,4 +1,7 @@
 export const QUESTION_WINDOW_MS = 72 * 60 * 60 * 1000;
+export const MAX_QUESTIONS = 5;
+export const MAX_QUESTION_CHARS = 1000;
+export const MAX_QUESTION_ROUND_CHARS = 3000;
 
 export const SERVICES = {
   labels: 'Подбор лейблов',
@@ -36,10 +39,23 @@ export function changeOrder(current, actorId, action, data = {}, now = Date.now(
       break;
     case 'questions':
       requireThat(canAsk(order, now), 'Раунд вопросов уже использован или 72 часа истекли.');
-      requireThat(Array.isArray(data.questions) && data.questions.length >= 1 && data.questions.length <= 2
-        && data.questions.every(q => typeof q === 'string' && q.trim().length > 0 && q.length <= 1000), 'Отправь один или два вопроса, до 1 000 знаков каждый.');
-      order.questions = data.questions.map(q => q.trim());
-      order.status = 'questions_pending';
+      if (data.questionVoice) {
+        const voice = data.questionVoice;
+        requireThat(typeof voice.fileId === 'string' && voice.fileId.length > 0
+          && Number.isSafeInteger(voice.durationSeconds) && voice.durationSeconds >= 0
+          && (data.questions === undefined || (Array.isArray(data.questions) && data.questions.length === 0)), 'Пришли вопросы одним голосовым или текстом.');
+        // The spoken question count is an instruction to the client, not an automatic transcription.
+        order.questionVoice = { fileId: voice.fileId, durationSeconds: voice.durationSeconds };
+        delete order.questions;
+        order.status = 'questions_queued';
+      } else {
+        requireThat(Array.isArray(data.questions) && data.questions.length >= 1 && data.questions.length <= MAX_QUESTIONS
+          && data.questions.every(q => typeof q === 'string' && q.trim().length > 0 && q.length <= MAX_QUESTION_CHARS)
+          && data.questions.join('').length <= MAX_QUESTION_ROUND_CHARS, 'Отправь до пяти вопросов: до 1 000 знаков каждый и до 3 000 на весь раунд.');
+        order.questions = data.questions.map(q => q.trim());
+        delete order.questionVoice;
+        order.status = 'questions_pending';
+      }
       break;
     case 'skip':
       requireThat(order.status === 'reviewed', 'Этот шаг уже завершён.');
@@ -106,7 +122,8 @@ export function delivered(current, kind, now = Date.now()) {
   if (kind === 'review' && order.status === 'review_queued') {
     order.status = 'reviewed';
     order.reviewedAt = now;
-  } else if (kind === 'answer' && order.status === 'answer_queued') order.status = 'ready_finish';
+  } else if (kind === 'questions' && order.status === 'questions_queued') order.status = 'questions_pending';
+  else if (kind === 'answer' && order.status === 'answer_queued') order.status = 'ready_finish';
   else if (kind === 'offer' && order.status === 'offer_queued') order.status = 'completed';
   else throw new Error('Unexpected delivery transition');
   order.updatedAt = now;
