@@ -2,17 +2,52 @@ import { canAsk, canFinish, changeOrder, delivered, hasReviewAccess, offerText, 
 
 const button = (order, text, action) => ({ text, callback_data: `o:${order.id}:${action}` });
 const keyboard = rows => ({ inline_keyboard: rows });
+const menuButton = { text: '← Меню', callback_data: 'm:home' };
+const navigation = (text, action) => ({ text, callback_data: `m:${action}` });
+const orderTitle = order => order.isTest ? 'Пробный разбор' : order.title;
+const deadlineText = order => `${new Intl.DateTimeFormat('ru-RU', {
+  timeZone: 'Europe/Moscow', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+}).format(order.reviewedAt + QUESTION_WINDOW_MS)} МСК`;
 
 export class BotApp {
   constructor(store, clock = Date.now, brand = 'FW LABEL NETWORK') { this.store = store; this.clock = clock; this.brand = brand; }
   say(chatId, text, rows = []) {
-    this.store.enqueue(chatId, 'sendMessage', { text, protect_content: true,
-      link_preview_options: { is_disabled: true }, ...(rows.length ? { reply_markup: keyboard(rows) } : {}) });
+    const editing = this.replyTo?.chatId === chatId;
+    this.store.enqueue(chatId, editing ? 'editMessageText' : 'sendMessage', {
+      text, link_preview_options: { is_disabled: true },
+      ...(editing ? { message_id: this.replyTo.messageId, reply_markup: keyboard(rows) } : { protect_content: true }),
+      ...(!editing && rows.length ? { reply_markup: keyboard(rows) } : {}),
+    });
+  }
+  showHome(actorId, resume = false) {
+    const orders = this.store.ordersFor(actorId);
+    if (resume && orders.length === 1) { this.showOrder(orders[0], actorId); return; }
+    this.say(actorId, `${this.brand}\n\nГолосовой разбор твоего трека и личные рекомендации эксперта.\n\n${orders.length ? 'Открой свой разбор или задание.' : 'Для подключения разбора открой личную ссылку заказа.'}`, [
+      [navigation('Мои разборы', 'orders')],
+      ...(this.store.expert(actorId) ? [[navigation('Мои задания', 'tasks')]] : []),
+      [navigation('Как это работает', 'help')],
+    ]);
+  }
+  showOrders(actorId, role) {
+    if (role === 'expert') requireThat(this.store.expert(actorId), 'Доступ к заданиям появится после подключения эксперта.');
+    const orders = this.store.ordersFor(actorId).filter(order => order[role === 'expert' ? 'expertId' : 'clientId'] === actorId);
+    if (orders.length === 1) { this.showOrder(orders[0], actorId); return; }
+    this.say(actorId, orders.length ? 'Выбери разбор:' : (role === 'expert'
+      ? 'Новых заданий пока нет. Когда поступит заказ, бот пришлёт его сюда.'
+      : 'У тебя пока нет разборов. Открой личную ссылку своего заказа, чтобы подключить его.'), [
+      ...orders.slice(0, 30).map(order => [button(order, orderTitle(order), 'open')]), [menuButton],
+    ]);
+  }
+  showHelp(actorId) {
+    this.say(actorId, 'Как проходит разбор\n\n1. После оплаты эксперт получает твой трек.\n2. Слушает его и присылает личный голосовой разбор.\n3. Ты можешь задать до двух вопросов одним раундом в течение 72 часов — или нажать «Всё понятно».\n\nДальнейшие услуги обсуждаются отдельно, по твоему желанию. В демо можно пройти весь путь без оплаты.', [[menuButton]]);
   }
   controls(order, actorId) {
     const expert = order.expertId === actorId;
     if (expert) {
-      if (order.status === 'awaiting_review') return [[button(order, 'Записать голосовой разбор', 'review')]];
+      if (order.status === 'awaiting_review') return [
+        ...(order.trackUrl ? [[{ text: 'Открыть трек', url: order.trackUrl }]] : []),
+        [button(order, 'Записать голосовой разбор', 'review')],
+      ];
       if (order.status === 'questions_pending') return [[button(order, 'Ответить на вопросы', 'answer')]];
       if (canFinish(order, this.clock())) return [[button(order, 'Завершить разбор', 'finish')]];
       if (order.status === 'deciding') return [
@@ -21,38 +56,67 @@ export class BotApp {
       ];
       if (order.status === 'offer_edit') return [
         ...serviceKeys(order.verdict).map(key => [button(order, `${order.services.includes(key) ? '✓ ' : ''}${SERVICES[key]}`, `s_${key}`)]),
-        [button(order, 'Добавить комментарий', 'note')], [button(order, 'Посмотреть предложение', 'preview')],
+        ...(order.services.length ? [[button(order, 'Далее →', 'preview')]] : []),
         [button(order, 'Изменить оценку готовности', 'verdict')], [button(order, 'Завершить без предложения', 'close')],
       ];
     } else {
       if (canAsk(order, this.clock())) return [[button(order, 'Задать вопросы', 'ask')], [button(order, 'Всё понятно', 'skip')]];
       if (order.status === 'completed' && order.services?.length && !order.interested) return [[button(order, 'Узнать условия', 'interest')]];
     }
-    return [];
+    return [[button(order, 'Обновить статус', 'open')]];
   }
   showOrder(order, actorId) {
-    const statuses = {
-      awaiting_review: 'Ожидаем голосовой разбор.', review_queued: 'Доставляем голосовой разбор.',
-      reviewed: 'Разбор доставлен. Один раунд: до двух вопросов в течение 72 часов.',
-      questions_pending: 'Вопросы отправлены. Ожидаем ответ эксперта.', answer_queued: 'Доставляем ответ эксперта.',
-      ready_finish: 'Ответы завершены. Эксперт может подвести итог.', deciding: 'Готов ли трек к отправке на лейблы?',
-      offer_edit: 'Выбери одну или две подходящие услуги. Можно завершить без предложения.',
-      offer_queued: 'Доставляем предложение.', completed: 'Разбор завершён.',
-    };
+    requireThat(actorId === order.expertId || actorId === order.clientId, 'Этот разбор недоступен.');
     const isExpert = order.expertId === actorId;
-    const detail = isExpert && hasReviewAccess(order) && order.clientId
-      ? (order.trackUrl ? `\nТрек: ${order.trackUrl}` : '\nТест без трека: запиши любое короткое пробное голосовое сообщение.') : '';
+    if (!isExpert && order.status === 'completed' && order.services?.length) {
+      const requested = order.isTest ? 'Демо пройдено. Запрос передан, реальные услуги не заказаны.'
+        : 'Условия запрошены. Вернёмся с предложением по задаче, стоимости и срокам.';
+      this.say(actorId, order.interested ? requested : offerText(order), [
+        ...this.controls(order, actorId), [menuButton],
+      ]);
+      return;
+    }
+    const expertStatuses = {
+      awaiting_review: order.isTest && !order.trackUrl
+        ? 'Клиент ждёт разбор. Для проверки запиши любое короткое голосовое сообщение.'
+        : 'Послушай трек и запиши голосовой разбор: что получилось и что стоит доработать.',
+      review_queued: 'Передаём голосовой разбор клиенту.',
+      reviewed: canAsk(order, this.clock()) ? 'Клиент получил разбор. Теперь он может задать вопросы или нажать «Всё понятно».'
+        : 'Время для уточнений истекло. Подведи итог разбора.',
+      questions_pending: 'Клиент прислал уточнения. Ответь на них одним голосовым или текстовым сообщением.',
+      answer_queued: 'Передаём твой ответ клиенту.',
+      ready_finish: 'Уточнения завершены. Подведи итог и выбери следующий шаг для трека.',
+      deciding: 'Готов ли трек к отправке на лейблы?',
+      offer_edit: 'Выбери до двух подходящих услуг. Можно завершить разбор без предложения.',
+      offer_queued: 'Отправляем предложение клиенту.',
+      completed: order.interested ? 'Клиент запросил условия по следующей услуге.'
+        : order.services?.length ? 'Предложение доставлено клиенту. Он сможет запросить условия.' : 'Разбор завершён. Спасибо!',
+    };
+    const clientStatuses = {
+      awaiting_review: 'Заказ у эксперта. Здесь появится твой голосовой разбор, а после него можно будет задать вопросы.',
+      review_queued: 'Голосовой разбор готов — сейчас он появится здесь.',
+      reviewed: canAsk(order, this.clock()) ? 'Послушай голосовое сообщение выше. Есть вопросы? Отправь один или два одним раундом — либо нажми «Всё понятно».'
+        : 'Время для уточнений истекло. Эксперт подведёт итог разбора.',
+      questions_pending: 'Твои вопросы у эксперта. Его ответ появится здесь.',
+      answer_queued: 'Эксперт ответил — сейчас сообщение появится здесь.',
+      ready_finish: 'Ответ на уточнения получен. Эксперт подведёт итог разбора.',
+      deciding: 'Эксперт подводит итог разбора.',
+      offer_edit: 'Эксперт готовит рекомендации по следующему шагу.',
+      offer_queued: 'Рекомендации по следующему шагу сейчас появятся здесь.',
+      completed: order.services?.length ? offerText(order) : 'Разбор завершён. Возвращайся к рекомендациям, когда будешь работать над треком.',
+    };
+    const expertName = this.store.expert(order.expertId)?.name ?? 'Твой эксперт';
+    const status = hasReviewAccess(order) ? (isExpert ? expertStatuses : clientStatuses)[order.status] : 'Ждём подтверждения оплаты. После неё эксперт получит трек.';
     const questions = isExpert && order.questions?.length ? `\n\nВопросы клиента:\n${order.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : '';
     const deadline = order.reviewedAt && order.status === 'reviewed'
-      ? `\nВопросы принимаются до ${new Date(order.reviewedAt + QUESTION_WINDOW_MS).toISOString().replace('T', ' ').slice(0, 16)} UTC.` : '';
-    this.say(actorId, `${order.isTest ? 'ТЕСТ — без оплаты. Реальные услуги не заказываются.\n\n' : ''}Заказ ${order.id} · ${order.title}\n${hasReviewAccess(order) ? statuses[order.status] : 'Ожидаем подтверждение оплаты.'}${detail}${questions}${deadline}`,
-      hasReviewAccess(order) ? this.controls(order, actorId) : []);
+      ? `\n\nУточнения доступны до ${deadlineText(order)}.` : '';
+    this.say(actorId, `${order.isTest ? 'Демо · без оплаты\n\n' : ''}${orderTitle(order)}${!isExpert ? `\nЭксперт: ${expertName}` : ''}\n\n${status}${questions}${deadline}`, [
+      ...(hasReviewAccess(order) ? this.controls(order, actorId) : []), [menuButton],
+    ]);
   }
   orderReady(order) {
     if (hasReviewAccess(order) && order.clientId) {
-      this.say(order.clientId, order.isTest
-        ? `ТЕСТ — заказ «${order.title}» подключён без оплаты. Эксперт отправит пробное голосовое сообщение. Реальные услуги не заказываются.`
-        : `Оплата заказа «${order.title}» подтверждена. Трек передан выбранному эксперту.`);
+      this.showOrder(order, order.clientId);
       this.showOrder(order, order.expertId);
     }
   }
@@ -69,60 +133,60 @@ export class BotApp {
   }
   process(update) {
     if (!Number.isSafeInteger(update.update_id)) return;
-    return this.store.transaction(() => {
+    try { return this.store.transaction(() => {
       const offset = Number(this.store.getMeta('offset') ?? 0);
       if (update.update_id < offset) return;
       const message = update.message ?? update.callback_query?.message;
       const actorId = (update.callback_query?.from ?? update.message?.from)?.id;
       // No group chats or identity inferred from a callback payload.
       if (message?.chat?.type === 'private' && message.chat.id === actorId && Number.isSafeInteger(actorId) && actorId > 0) {
+        if (update.callback_query && Number.isSafeInteger(message.message_id)) {
+          this.replyTo = { chatId: actorId, messageId: message.message_id };
+        }
         try {
           if (update.callback_query) this.callback(actorId, update.callback_query.data);
           else this.message(actorId, update.message);
         } catch (error) {
           if (!(error instanceof UserError)) throw error;
-          this.say(actorId, error.message);
+          this.say(actorId, error.message, [[menuButton]]);
         }
       }
       // This and all state/outgoing effects commit together. Replayed updates have no effects.
       this.store.setMeta('offset', update.update_id + 1);
-    });
+    }); } finally { this.replyTo = null; }
   }
   message(actorId, message) {
     const text = message.text?.trim() ?? '';
     if (text.startsWith('/start')) {
-      requireThat(/^\/start(?:@[A-Za-z0-9_]+)?(?:\s+[A-Za-z0-9_-]{32})?$/.test(text), 'Открой персональную ссылку на заказ или используй /orders.');
+      requireThat(/^\/start(?:@[A-Za-z0-9_]+)?(?:\s+[A-Za-z0-9_-]{32})?$/.test(text), 'Открой личную ссылку своего заказа.');
       const token = text.split(/\s+/)[1];
       if (token) {
         const order = this.store.bindClient(token, actorId);
-        requireThat(order, 'Приглашение уже использовано или недействительно. Твои заказы: /orders.');
-        this.say(actorId, `Ты подключён к заказу «${order.title}». Здесь будут разбор и вопросы. Личные сообщения не публикуются.`);
-        this.orderReady(order);
-        this.showOrder(order, actorId);
-      } else this.say(actorId, `${this.brand}\n\nДля клиента: открой личную ссылку заказа от платформы. Для подключённого эксперта: /orders.\n\n/id — мой Telegram ID для подключения эксперта\n/help — инструкция, /cancel — отменить ввод.`);
+        if (!order && this.store.ordersFor(actorId).length) { this.showHome(actorId, true); return; }
+        requireThat(order, 'Эта ссылка уже использована или недействительна. Открой личную ссылку своего заказа.');
+        if (hasReviewAccess(order)) this.orderReady(order);
+        else this.showOrder(order, actorId);
+      } else {
+        this.store.setSession(actorId, null);
+        this.showHome(actorId, true);
+      }
       return;
     }
     if (text === '/id') {
-      this.say(actorId, `Твой Telegram ID: ${actorId}\nПередай его оператору платформы для подключения. Команда не назначает роль эксперта.`);
+      this.say(actorId, `Твой Telegram ID: ${actorId}`, [[menuButton]]);
       return;
     }
-    if (text === '/help') {
-      this.say(actorId, 'Трек добавляет платформа по личной ссылке; он доступен эксперту после подтверждения оплаты.\n\nЭксперт отправляет голосовой разбор. Клиент задаёт один или два текстовых вопроса одним раундом за 72 часа или нажимает «Всё понятно». Эксперт отвечает и завершает разбор.\n\nДополнительные услуги — по желанию и с отдельным согласованием.\n\n/orders — мои заказы\n/id — мой Telegram ID\n/cancel — отменить текущий ввод.');
+    if (text === '/help' || text === 'Как это работает') {
+      this.showHelp(actorId);
       return;
     }
     if (text === '/cancel' || text === '/orders') {
       this.store.setSession(actorId, null);
-      if (text === '/cancel') this.say(actorId, 'Ввод отменён. Открыть заказы: /orders.');
-      else {
-        const orders = this.store.ordersFor(actorId);
-        if (!orders.length) this.say(actorId, 'Заказов пока нет. Клиенту нужна личная ссылка. Эксперта подключает платформа; неоплаченные заказы ему не передаются.');
-        // A compact picker avoids enqueuing every historical order on each request.
-        else this.say(actorId, 'Выбери заказ:', orders.slice(0, 30).map(o => [button(o, `${o.title} · ${o.id}`, 'open')]));
-      }
+      this.showHome(actorId, true);
       return;
     }
     const session = this.store.session(actorId);
-    requireThat(session, 'Открой /orders и выбери действие для нужного заказа.');
+    if (!session) { this.showHome(actorId); return; }
     const order = this.store.order(session.orderId);
     requireThat(order, 'Заказ не найден.');
     if (session.kind === 'review' || session.kind === 'answer') {
@@ -133,15 +197,17 @@ export class BotApp {
       if (voice) this.store.enqueue(order.clientId, 'sendVoice', { voice, protect_content: true }, { orderId: order.id, kind: action });
       else this.store.enqueue(order.clientId, 'sendMessage', { text, protect_content: true }, { orderId: order.id, kind: action });
       this.store.setSession(actorId, null);
-      this.say(actorId, 'Сообщение сохранено для доставки клиенту. Бот сообщит, когда Telegram примет его.');
     } else if (session.kind === 'questions') {
       requireThat(order.clientId === actorId && canAsk(order, this.clock()), 'Раунд вопросов уже использован или 72 часа истекли.');
       requireThat(text && !text.startsWith('/') && text.length <= 1000, 'Вопрос отправь текстом, до 1 000 знаков.');
-      requireThat(session.questions.length < 2, 'Уже записано два вопроса. Нажми «Отправить вопросы» или /cancel.');
+      if (session.questions.length >= 2) {
+        this.say(actorId, 'Уже записано два вопроса. Отправить их эксперту?', [[button(order, 'Отправить эксперту', 'submit')], [button(order, 'Отменить', 'open')]]);
+        return;
+      }
       session.questions.push(text);
       this.store.setSession(actorId, session);
-      this.say(actorId, `Вопрос ${session.questions.length} сохранён. ${session.questions.length === 1 ? 'Можешь написать второй или отправить один.' : 'Оба вопроса готовы.'}\nЭто единственный раунд вопросов.`,
-        [[button(order, 'Отправить вопросы', 'submit')]]);
+      this.say(actorId, session.questions.length === 1 ? 'Первый вопрос записан. Напиши второй или отправь один.' : 'Два вопроса записаны. Отправить эксперту?',
+        [[button(order, 'Отправить эксперту', 'submit')], [button(order, 'Отменить', 'open')]]);
     } else if (session.kind === 'note') {
       const next = changeOrder(order, actorId, 'note', { text }, this.clock());
       this.store.save(next);
@@ -150,8 +216,17 @@ export class BotApp {
     }
   }
   callback(actorId, value) {
+    const menu = /^m:(home|orders|tasks|help)$/.exec(value ?? '');
+    if (menu) {
+      this.store.setSession(actorId, null);
+      if (menu[1] === 'home') this.showHome(actorId);
+      if (menu[1] === 'orders') this.showOrders(actorId, 'client');
+      if (menu[1] === 'tasks') this.showOrders(actorId, 'expert');
+      if (menu[1] === 'help') this.showHelp(actorId);
+      return;
+    }
     const match = /^o:([a-f0-9]{12}):([a-z_]+)$/.exec(value ?? '');
-    requireThat(match, 'Открой актуальные действия через /orders.');
+    requireThat(match, 'Эта кнопка устарела. Открой меню, чтобы продолжить.');
     const [, id, action] = match;
     const order = this.store.order(id);
     requireThat(order && (order.clientId === actorId || order.expertId === actorId), 'Этот заказ недоступен.');
@@ -159,18 +234,20 @@ export class BotApp {
     const expert = order.expertId === actorId;
     const clientActions = ['ask', 'submit', 'skip', 'interest'];
     if (action !== 'open') requireThat(clientActions.includes(action) ? !expert : expert, 'Это действие недоступно.');
-    if (action === 'open') { this.showOrder(order, actorId); return; }
+    if (action === 'open') { this.store.setSession(actorId, null); this.showOrder(order, actorId); return; }
     if (action === 'review' || action === 'answer') {
       requireThat(order.status === (action === 'review' ? 'awaiting_review' : 'questions_pending'), 'Этот этап уже завершён.');
       this.store.setSession(actorId, { orderId: id, kind: action });
-      this.say(actorId, action === 'review' ? `Заказ «${order.title}». Отправь голосовой разбор (ориентир: 2–4 минуты). /cancel — отмена.`
-        : `Заказ «${order.title}». Ответь на вопросы одним голосовым или текстовым сообщением.\n${order.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`);
+      this.say(actorId, action === 'review'
+        ? `${orderTitle(order)}\n\nЗапиши голосовое сообщение прямо в этот чат.${order.isTest ? ' Для проверки хватит нескольких секунд.' : ' Ориентир — 2–4 минуты: что работает и что доработать.'}`
+        : `Ответ на уточнения\n\n${order.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\nПришли один голосовой или текстовый ответ на уточнения.`,
+      [[button(order, 'Отменить', 'open')]]);
       return;
     }
     if (action === 'ask') {
       requireThat(canAsk(order, this.clock()), 'Раунд вопросов уже использован или 72 часа истекли.');
       this.store.setSession(actorId, { orderId: id, kind: 'questions', questions: [] });
-      this.say(actorId, 'Напиши первый вопрос одним текстовым сообщением. Можно задать до двух вопросов одним раундом. /cancel — отмена.');
+      this.say(actorId, 'Напиши первый вопрос одним сообщением. Затем можно добавить второй или сразу отправить эксперту.', [[button(order, 'Отменить', 'open')]]);
       return;
     }
     if (action === 'submit') {
@@ -179,7 +256,7 @@ export class BotApp {
       const next = changeOrder(order, actorId, 'questions', { questions: session.questions }, this.clock());
       this.store.save(next);
       this.store.setSession(actorId, null);
-      this.say(actorId, 'Вопросы отправлены эксперту.');
+      this.showOrder(next, actorId);
       this.showOrder(next, order.expertId);
       return;
     }
@@ -188,7 +265,7 @@ export class BotApp {
       if (action === 'preview') this.preview(order, actorId);
       if (action === 'note') {
         this.store.setSession(actorId, { orderId: id, kind: 'note' });
-        this.say(actorId, 'Напиши короткий комментарий к предложению (до 1 000 знаков). /cancel — отмена.');
+        this.say(actorId, 'Напиши короткий комментарий к предложению (до 1 000 знаков).', [[button(order, 'Отменить', 'open')]]);
       }
       if (action === 'verdict') this.say(actorId, 'При смене оценки выбранные услуги и комментарий сбросятся.', [
         [button(order, '🟢 Готов к отправке', 'ready')], [button(order, '🛠 Нужна доработка', 'work')],
@@ -215,22 +292,25 @@ export class BotApp {
     const next = changeOrder(order, actorId, action, {}, this.clock());
     this.store.save(next);
     this.store.setSession(actorId, null);
-    if (action === 'skip') { this.say(actorId, 'Уточнения завершены. Эксперт подведёт итог.'); this.showOrder(next, order.expertId); }
+    if (action === 'skip') { this.showOrder(next, actorId); this.showOrder(next, order.expertId); }
     else if (action === 'offer') {
-      this.store.enqueue(order.clientId, 'sendMessage', { text: offerText(next), protect_content: true }, { orderId: id, kind: 'offer' });
-      this.say(actorId, 'Предложение сохранено для доставки.');
+      this.store.enqueue(order.clientId, 'sendMessage', { text: offerText(next), protect_content: true,
+        reply_markup: keyboard([[button(next, 'Узнать условия', 'interest')], [menuButton]]),
+      }, { orderId: id, kind: 'offer' });
+      this.showOrder(next, actorId);
     } else if (action === 'close') {
-      this.say(order.clientId, `Разбор «${order.title}» завершён. Спасибо!`);
-      this.say(actorId, 'Разбор завершён без предложения услуг.');
+      this.showOrder(next, order.clientId);
+      this.showOrder(next, actorId);
     } else if (action === 'interest') {
-      this.say(order.expertId, `${order.isTest ? 'ТЕСТ — пробный запрос, реальные услуги не заказываются.\n\n' : ''}Клиент хочет узнать условия по заказу ${id} «${order.title}»:\n${order.services.map(s => SERVICES[s]).join(', ')}.\nПлатформа согласует задачу, стоимость и сроки отдельно.`);
-      this.say(actorId, order.isTest ? 'ТЕСТ — запрос передан. Проверка бота завершена, реальные услуги не заказаны.' : 'Запрос передан. Платформа согласует с тобой задачу, стоимость и сроки. Новой оплаты сейчас нет.');
+      this.say(order.expertId, `${order.isTest ? 'Демо · без оплаты\n\n' : ''}Клиент хочет узнать условия: ${orderTitle(order)}\n\n${order.services.map(s => SERVICES[s]).join(', ')}.\n\nПлатформа согласует задачу, стоимость и сроки отдельно.`, [[button(order, 'Открыть разбор', 'open')]]);
+      this.say(actorId, order.isTest ? 'Демо пройдено. Запрос передан, реальные услуги не заказаны.' : 'Запрос передан. Согласуем с тобой задачу, стоимость и сроки до нового заказа.', [[menuButton]]);
     } else this.showOrder(next, actorId);
   }
   preview(order, actorId) {
     requireThat(order.services?.length > 0, 'Сначала выбери одну или две услуги.');
     this.say(actorId, `Предпросмотр для клиента:\n\n${offerText(order)}`, [
-      [button(order, 'Отправить предложение', 'offer')], [button(order, 'Изменить', 'edit')],
+      [button(order, 'Отправить предложение', 'offer')], [button(order, 'Добавить комментарий', 'note')],
+      [button(order, 'Изменить услуги', 'edit')], [button(order, 'Завершить без предложения', 'close')],
     ]);
   }
   async flush(api, limit = 30) {
@@ -250,8 +330,7 @@ export class BotApp {
         if (!row.delivery) return;
         const order = delivered(this.store.order(row.delivery.orderId), row.delivery.kind, this.clock());
         this.store.save(order);
-        if (row.delivery.kind === 'offer') this.say(order.clientId, 'Если хочешь продолжить, можно запросить условия.', this.controls(order, order.clientId));
-        else this.showOrder(order, order.clientId);
+        if (row.delivery.kind !== 'offer') this.showOrder(order, order.clientId);
         this.showOrder(order, order.expertId);
       });
     }

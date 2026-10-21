@@ -15,11 +15,12 @@ export function fixture(path = ':memory:', { isTest = false } = {}) {
   const message = (actorId, payload) => app.process({ update_id: updateId++, message: {
     chat: { id: actorId, type: 'private' }, from: { id: actorId }, ...payload,
   } });
-  const click = (actorId, action, id = created.order.id) => app.process({ update_id: updateId++, callback_query: {
-    id: `callback-${updateId}`, from: { id: actorId }, data: `o:${id}:${action}`,
-    message: { chat: { id: actorId, type: 'private' } },
+  const callback = (actorId, data) => app.process({ update_id: updateId++, callback_query: {
+    id: `callback-${updateId}`, from: { id: actorId }, data,
+    message: { message_id: 100, chat: { id: actorId, type: 'private' } },
   } });
-  return { store, app, api, sent, message, click, ...created,
+  const click = (actorId, action, id = created.order.id) => callback(actorId, `o:${id}:${action}`);
+  return { store, app, api, sent, message, click, navigate: (actorId, action) => callback(actorId, `m:${action}`), ...created,
     get: () => store.order(created.order.id),
     advance: ms => { now += ms; },
     async paid() {

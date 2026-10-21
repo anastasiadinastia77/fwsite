@@ -13,7 +13,7 @@ export class TelegramAPI {
     this.fetchImpl = fetchImpl;
   }
   async call(method, payload = {}, signal) {
-    if (!['getMe', 'getUpdates', 'getWebhookInfo', 'sendMessage', 'sendVoice', 'answerCallbackQuery'].includes(method)) throw new Error('Unsupported Telegram method');
+    if (!['getMe', 'getUpdates', 'getWebhookInfo', 'sendMessage', 'editMessageText', 'sendVoice', 'answerCallbackQuery'].includes(method)) throw new Error('Unsupported Telegram method');
     let response;
     try {
       response = await this.fetchImpl(`https://api.telegram.org/bot${this.token}/${method}`, {
@@ -21,6 +21,17 @@ export class TelegramAPI {
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(40_000)]) : AbortSignal.timeout(40_000),
       });
       const result = await response.json();
+      if (method === 'editMessageText' && result.error_code === 400) {
+        const description = String(result.description ?? '').toLowerCase();
+        // Refreshing an unchanged card is a success, not a delivery failure.
+        if (description.includes('message is not modified')) return null;
+        // A user may have deleted the old card. Recreate it in the same private chat.
+        if (description.includes('message to edit not found') || description.includes("message can't be edited")) {
+          const fallback = { ...payload, protect_content: true };
+          delete fallback.message_id;
+          return this.call('sendMessage', fallback, signal);
+        }
+      }
       if (!response.ok || !result.ok) throw new TelegramError(result.error_code ?? response.status, (result.parameters?.retry_after ?? 0) * 1000);
       return result.result;
     } catch (error) {

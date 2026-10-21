@@ -114,5 +114,5 @@ export function delivered(current, kind, now = Date.now()) {
 }
 
 export function offerText(order) {
-  return `${order.isTest ? 'ТЕСТ — предложение для проверки бота, без заказа реальных услуг.\n\n' : ''}Следующий шаг для «${order.title}»\n\n${order.verdict === 'ready' ? 'Эксперт считает трек готовым к отправке на лейблы.' : 'Эксперт рекомендует доработать трек.'}\n\n${order.services.map(s => `• ${SERVICES[s]}`).join('\n')}${order.note ? `\n\n${order.note}` : ''}\n\nЭто отдельные, необязательные услуги. Стоимость и сроки согласуем до нового заказа. Личная рекомендация не гарантирует ответ или контракт с лейблом.`;
+  return `${order.isTest ? 'Демо · без оплаты\n\n' : ''}Следующий шаг: ${order.isTest ? 'пробный разбор' : order.title}\n\n${order.verdict === 'ready' ? 'Эксперт считает трек готовым к отправке на лейблы.' : 'Эксперт рекомендует доработать трек.'}\n\n${order.services.map(s => `• ${SERVICES[s]}`).join('\n')}${order.note ? `\n\n${order.note}` : ''}\n\nУслуги по желанию. Стоимость и сроки согласуем до нового заказа.${order.services.includes('intro') ? '\nЛичная рекомендация не гарантирует ответ или контракт с лейблом.' : ''}`;
 }

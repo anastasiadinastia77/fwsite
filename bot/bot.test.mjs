@@ -60,10 +60,47 @@ test('operator-created test order completes without a payment and labels message
   f.click(1001, 'finish'); f.click(1001, 'work'); f.click(1001, 's_refinement'); f.click(1001, 'offer');
   await f.app.flush(f.api); f.click(2001, 'interest'); await f.app.flush(f.api);
   assert.equal(f.get().status, 'completed'); assert.equal(f.get().interested, true); assert.equal(f.get().paid, false);
-  assert.ok(f.sent.some(m => m.chat_id === 2001 && m.text?.includes('ТЕСТ — заказ')));
-  assert.ok(f.sent.some(m => m.chat_id === 2001 && m.text?.includes('ТЕСТ — предложение')));
+  assert.ok(f.sent.some(m => m.chat_id === 2001 && m.text?.includes('Демо · без оплаты')));
   assert.ok(f.sent.some(m => m.chat_id === 2001 && m.text?.includes('реальные услуги не заказаны')));
   assert.equal(f.sent.some(m => m.text?.includes('Оплата заказа')), false);
+});
+
+test('joining an order produces one client card with actions, and reopening its used link resumes it', async t => {
+  const f = fixture(':memory:', { isTest: true }); t.after(() => f.store.close());
+  f.message(2001, { text: `/start ${f.invite}` }); await f.app.flush(f.api);
+  const client = f.sent.filter(m => m.chat_id === 2001);
+  const expert = f.sent.filter(m => m.chat_id === 1001);
+  assert.equal(client.length, 1); assert.equal(expert.length, 1);
+  assert.equal(client[0].text.includes(f.order.id), false);
+  assert.ok(client[0].reply_markup.inline_keyboard.flat().some(b => b.callback_data === `o:${f.order.id}:open`));
+  assert.ok(expert[0].reply_markup.inline_keyboard.flat().some(b => b.callback_data === `o:${f.order.id}:review`));
+  f.message(2001, { text: `/start ${f.invite}` }); await f.app.flush(f.api);
+  assert.equal(f.sent.filter(m => m.chat_id === 2001).length, 2);
+  assert.equal(f.get().clientId, 2001);
+});
+
+test('button navigation edits the existing card, keeps roles separate and releases edit context afterwards', async t => {
+  const f = fixture(':memory:', { isTest: true }); t.after(() => f.store.close());
+  f.message(2001, { text: `/start ${f.invite}` }); await f.app.flush(f.api); f.sent.length = 0;
+  f.navigate(2001, 'home'); f.navigate(2001, 'orders'); f.navigate(2001, 'tasks');
+  f.navigate(1001, 'home'); f.navigate(1001, 'tasks'); await f.app.flush(f.api);
+  assert.ok(f.sent.every(m => m.method === 'editMessageText' && m.message_id === 100));
+  const clientMenus = f.sent.filter(m => m.chat_id === 2001);
+  assert.equal(clientMenus.some(m => m.reply_markup.inline_keyboard.flat().some(b => b.callback_data === `o:${f.order.id}:review`)), false);
+  assert.ok(f.sent.some(m => m.chat_id === 1001 && m.reply_markup.inline_keyboard.flat().some(b => b.callback_data === `o:${f.order.id}:review`)));
+  f.message(2001, { text: '/start' }); await f.app.flush(f.api);
+  assert.equal(f.sent.at(-1).method, 'sendMessage');
+});
+
+test('service choices edit the expert card and the client receives one offer with its action button', async t => {
+  const f = fixture(); t.after(() => f.store.close()); await f.readyToOffer(); await f.app.flush(f.api); f.sent.length = 0;
+  f.click(1001, 's_labels'); f.click(1001, 's_demo'); f.click(1001, 'preview'); await f.app.flush(f.api);
+  assert.ok(f.sent.every(m => m.chat_id === 1001 && m.method === 'editMessageText'));
+  f.sent.length = 0; f.click(1001, 'offer'); await f.app.flush(f.api);
+  const client = f.sent.filter(m => m.chat_id === 2001);
+  assert.equal(client.length, 1);
+  assert.ok(client[0].reply_markup.inline_keyboard.flat().some(b => b.callback_data === `o:${f.order.id}:interest`));
+  assert.equal(f.get().status, 'completed');
 });
 
 test('client commands and callback payloads cannot turn a real unpaid order into a test', async t => {
@@ -85,10 +122,10 @@ test('unpaid track never reaches the expert; only trusted operator confirmation 
   f.message(2001, { text: '/payment_confirmed' });
   await f.app.flush(f.api);
   assert.equal(f.get().paid, false);
-  assert.equal(f.sent.some(m => m.chat_id === 1001 && m.text?.includes(f.order.trackUrl)), false);
+  assert.equal(f.sent.some(m => m.chat_id === 1001 && JSON.stringify(m).includes(f.order.trackUrl)), false);
   f.app.confirmPayment(f.order.id);
   await f.app.flush(f.api);
-  assert.equal(f.sent.some(m => m.chat_id === 1001 && m.text?.includes(f.order.trackUrl)), true);
+  assert.equal(f.sent.some(m => m.chat_id === 1001 && JSON.stringify(m).includes(f.order.trackUrl)), true);
   assert.throws(() => f.app.confirmPayment(f.order.id));
 });
 
@@ -261,6 +298,37 @@ test('Telegram adapter redacts token-bearing errors and respects retry-after', a
     async json() { return { ok: false, error_code: 429, parameters: { retry_after: 12 } }; },
   }));
   await assert.rejects(limited.call('sendMessage', {}), error => error.retryAfterMs === 12000);
+});
+
+test('refreshing an unchanged Telegram card does not block later messages in the outgoing queue', async t => {
+  const f = fixture(':memory:', { isTest: true }); t.after(() => f.store.close());
+  f.message(2001, { text: `/start ${f.invite}` }); await f.app.flush(f.api);
+  f.click(2001, 'open'); f.app.say(2001, 'Следующее сообщение');
+  const methods = [];
+  const api = new TelegramAPI('123456:fictional', async url => {
+    const method = url.split('/').at(-1); methods.push(method);
+    return method === 'editMessageText'
+      ? { ok: false, status: 400, async json() { return { ok: false, error_code: 400, description: 'Bad Request: message is not modified' }; } }
+      : { ok: true, status: 200, async json() { return { ok: true, result: { message_id: 101 } }; } };
+  });
+  await f.app.flush(api);
+  assert.deepEqual(methods, ['editMessageText', 'sendMessage']);
+  assert.equal(f.store.nextMessage(), undefined);
+});
+
+test('a deleted card is recreated in the same chat without retaining its old message ID', async () => {
+  const requests = [];
+  const api = new TelegramAPI('123456:fictional', async (url, options) => {
+    requests.push({ method: url.split('/').at(-1), body: JSON.parse(options.body) });
+    return requests.length === 1
+      ? { ok: false, status: 400, async json() { return { ok: false, error_code: 400, description: 'Bad Request: message to edit not found' }; } }
+      : { ok: true, status: 200, async json() { return { ok: true, result: { message_id: 102 } }; } };
+  });
+  await api.call('editMessageText', { chat_id: 2001, message_id: 100, text: 'Мой разбор' });
+  assert.deepEqual(requests.map(r => r.method), ['editMessageText', 'sendMessage']);
+  assert.equal(requests[1].body.chat_id, 2001);
+  assert.equal(requests[1].body.message_id, undefined);
+  assert.equal(requests[1].body.protect_content, true);
 });
 
 test('server admin commands create unpaid orders and require an explicit receipt check; live startup defaults off', () => {
