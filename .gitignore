@@ -4,3 +4,10 @@ dist/
 artifacts/
 test-results/
 playwright-report/
+.env
+.env.*
+!.env.bot.example
+.bot-data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
