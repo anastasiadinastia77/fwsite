@@ -3,6 +3,7 @@ import { setTimeout } from 'node:timers/promises';
 import { Store } from './store.mjs';
 import { BotApp } from './app.mjs';
 import { TelegramAPI, TelegramError } from './telegram.mjs';
+import { inspectBot } from './preflight.mjs';
 
 if (process.env.BOT_ENABLED !== 'true') {
   console.error('Live bot is disabled. Use npm run bot:demo for an offline walkthrough. To connect Telegram, configure the server and set BOT_ENABLED=true.');
@@ -30,9 +31,8 @@ process.once('SIGTERM', () => controller.abort());
 try {
   const api = new TelegramAPI(process.env.TELEGRAM_BOT_TOKEN);
   renewLease();
-  await api.call('getMe', {}, controller.signal);
-  const webhook = await api.call('getWebhookInfo', {}, controller.signal);
-  if (webhook.url) throw new Error('This bot already has a webhook. Use a separate pilot bot or deliberately reconfigure its existing deployment.');
+  const identity = await inspectBot(api, process.env.TELEGRAM_BOT_USERNAME, controller.signal);
+  if (identity.webhookConfigured) throw new Error('This bot already has a webhook. Use a separate pilot bot or deliberately reconfigure its existing deployment.');
   console.log('Bot connected. Long polling active; message contents and tokens are not logged.');
   while (!controller.signal.aborted) {
     renewLease();

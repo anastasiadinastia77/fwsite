@@ -9,6 +9,34 @@ import { Store } from './store.mjs';
 import { BotApp } from './app.mjs';
 import { QUESTION_WINDOW_MS } from './domain.mjs';
 import { TelegramAPI, TelegramError } from './telegram.mjs';
+import { inspectBot } from './preflight.mjs';
+
+test('preflight verifies the intended bot using only read-only calls', async () => {
+  const calls = [];
+  const api = { async call(method) {
+    calls.push(method);
+    return method === 'getMe' ? { is_bot: true, username: 'fwlablebot' } : { url: '' };
+  } };
+  assert.deepEqual(await inspectBot(api, 'FWLABLEBOT'), { username: 'fwlablebot', webhookConfigured: false });
+  assert.deepEqual(calls, ['getMe', 'getWebhookInfo']);
+});
+
+test('preflight rejects missing username and a token for another bot before delivery can start', async () => {
+  const calls = [];
+  const api = { async call(method) { calls.push(method); return { is_bot: true, username: 'different_bot' }; } };
+  await assert.rejects(inspectBot(api, undefined), /TELEGRAM_BOT_USERNAME/);
+  assert.deepEqual(calls, []);
+  await assert.rejects(inspectBot(api, 'fwlablebot'), /different bot/);
+  assert.deepEqual(calls, ['getMe']);
+});
+
+test('preflight reports an existing webhook without changing it or exposing its URL', async () => {
+  const result = await inspectBot({ async call(method) {
+    return method === 'getMe' ? { is_bot: true, username: 'fwlablebot' } : { url: 'https://example.invalid/private-webhook' };
+  } }, 'fwlablebot');
+  assert.deepEqual(result, { username: 'fwlablebot', webhookConfigured: true });
+  assert.equal(JSON.stringify(result).includes('private-webhook'), false);
+});
 
 test('onboarding gives a user their own Telegram ID without granting expert access', async t => {
   const f = fixture(); t.after(() => f.store.close());
