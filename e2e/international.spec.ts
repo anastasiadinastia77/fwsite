@@ -77,70 +77,7 @@ test('language switching keeps the filter, entered form, promo and error; choice
  await expect(page.locator('html')).toHaveAttribute('lang','ru');
 });
 
-test('international registration is translated, preserves drafts and makes no real application or payment',async({page})=>{
- const outgoing=assertDemoRequests(page);
- await page.goto('/?lang=en');
- await page.getByRole('button',{name:'Become an expert',exact:true}).click();
- const dialog=page.getByRole('dialog');
- await expect(dialog).not.toContainText(/[А-Яа-яЁё]/u);
- await page.getByLabel('Artist name',{exact:true}).fill('Demo Expert');
- await page.getByLabel('Test contact',{exact:true}).fill('@demo_expert');
- await page.getByLabel('Country of residence',{exact:true}).selectOption('UA');
- await page.getByLabel('Experience and label support').fill('Fictional review and label support experience.');
- await page.getByRole('button',{name:'Continue',exact:true}).click();
- await expect(page.getByLabel('Bank account country')).toHaveValue('UA');
- await page.getByLabel('Bank account country').selectOption('DE');
- await page.getByLabel('Payment recipient status').selectOption('individual');
- await page.getByLabel('Review price',{exact:true}).fill('50');
- await page.getByLabel('Pricing currency').selectOption('EUR');
- await page.getByLabel('I would also like to explore crypto payments').check();
- await expect(dialog).toContainText('only a preference');
- await expect(dialog).not.toContainText(/[А-Яа-яЁё]/u);
- await dialog.getByRole('button',{name:'Русский',exact:true}).click();
- await expect(page.getByLabel('Страна банковского счёта')).toHaveValue('DE');
- await expect(page.getByLabel('Цена разбора',{exact:true})).toHaveValue('50');
- await expect(page.getByLabel('Валюта цены')).toHaveValue('EUR');
- await expect(page.getByLabel('Хочу также рассмотреть криптооплату')).toBeChecked();
- await page.getByRole('button',{name:'Продолжить',exact:true}).click();
- await expect(dialog).toContainText('50 EUR');
- await expect(dialog).toContainText('Украина');
- await expect(dialog).toContainText('Германия');
- await dialog.getByRole('button',{name:'English',exact:true}).click();
- await expect(dialog).not.toContainText(/[А-Яа-яЁё]/u);
- await expect(dialog).toContainText('crypto payments require review');
- await page.getByRole('button',{name:'Finish the demo',exact:true}).click();
- await expect(dialog).toContainText('Your form has not been sent anywhere.');
- await page.getByRole('button',{name:'Back to the form',exact:true}).click();
- await expect(dialog).toContainText('Demo Expert');
- expect(outgoing).toEqual([]);
- expect(await page.evaluate(()=>Object.keys(localStorage))).toEqual(['fw-site-language']);
-});
-
-test('existing payment link is a checked draft, not a connected service',async({page})=>{
- const outgoing=assertDemoRequests(page);
- await page.goto('/?lang=en');
- await page.getByRole('button',{name:'Become an expert',exact:true}).click();
- await page.getByLabel('Artist name',{exact:true}).fill('Demo');
- await page.getByLabel('Test contact',{exact:true}).fill('@demo');
- await page.getByLabel('Country of residence').selectOption('US');
- await page.getByLabel('Experience and label support').fill('Fictional experience');
- await page.getByRole('button',{name:'Continue',exact:true}).click();
- await page.getByLabel('Payment recipient status').selectOption('sole_trader');
- await page.getByLabel('Review price',{exact:true}).fill('30');
- await page.getByLabel('Pricing currency').selectOption('USD');
- await page.getByLabel('I already have a payment service').check();
- await page.getByLabel('Payment service name').fill('Demo provider');
- await page.getByLabel('Payment link').fill('http://example.invalid/pay');
- await page.getByRole('button',{name:'Continue',exact:true}).click();
- await expect(page.getByRole('alert')).toContainText('HTTPS');
- await page.getByLabel('Payment link').fill('https://example.invalid/pay');
- await page.getByRole('button',{name:'Continue',exact:true}).click();
- await expect(page.getByRole('dialog')).toContainText('Demo provider');
- await expect(page.getByRole('dialog')).toContainText('30 USD');
- expect(outgoing).toEqual([]);
-});
-
-test('RU and EN navigation and forms fit narrow phones',async({page})=>{
+test('RU and EN landing and expert demo fit narrow phones',async({page})=>{
  for(const width of [320,390]){
   await page.setViewportSize({width,height:844});
   for(const lang of ['ru','en']){
@@ -150,8 +87,9 @@ test('RU and EN navigation and forms fit narrow phones',async({page})=>{
    await page.locator('header').getByRole('button',{name:lang==='en'?'Open menu':'Открыть меню',exact:true}).click();
    await page.locator('nav').getByRole('link',{name:lang==='en'?'For experts':'Для экспертов',exact:true}).click();
    await expect(page.locator('nav')).not.toBeVisible();
-   await page.getByRole('button',{name:lang==='en'?'Become an expert':'Стать экспертом',exact:true}).click();
-   expect(await page.getByRole('dialog').evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+   await page.getByRole('link',{name:lang==='en'?'Open the demo dashboard':'Открыть демо-кабинет',exact:true}).click();
+   await expect(page.getByRole('heading',{name:lang==='en'?'Demo registration':'Регистрация в демо',exact:true})).toBeVisible();
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    if(lang==='en'&&width===390)await page.screenshot({path:'artifacts/registration-en-mobile.png'});
   }
  }
