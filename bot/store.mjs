@@ -16,6 +16,10 @@ export class Store {
       CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, data TEXT NOT NULL, invite_hash TEXT UNIQUE);
       CREATE TABLE IF NOT EXISTS sessions (user_id INTEGER PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS materials (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, message_id INTEGER NOT NULL,
+        data TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(user_id,message_id)
+      );
       CREATE TABLE IF NOT EXISTS outbox (
         id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, data TEXT NOT NULL,
         attempts INTEGER NOT NULL DEFAULT 0, available_at INTEGER NOT NULL DEFAULT 0, sent INTEGER NOT NULL DEFAULT 0
@@ -29,6 +33,19 @@ export class Store {
   }
   getMeta(key) { return this.db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value; }
   setMeta(key, value) { this.db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key, String(value)); }
+  allowMaterials(id) {
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Valid uploader Telegram ID required');
+    this.setMeta('materials_uploader', id);
+  }
+  canUploadMaterials(id) { return String(id) === this.getMeta('materials_uploader'); }
+  saveMaterial(userId, messageId, data, now) {
+    if (!this.canUploadMaterials(userId) || !Number.isSafeInteger(messageId) || messageId <= 0) throw new Error('Invalid material sender or message');
+    this.db.prepare('INSERT OR IGNORE INTO materials (user_id,message_id,data,created_at) VALUES (?,?,?,?)').run(userId, messageId, JSON.stringify(data), now);
+    return this.db.prepare('SELECT id FROM materials WHERE user_id=? AND message_id=?').get(userId, messageId).id;
+  }
+  materials() {
+    return this.db.prepare('SELECT id,user_id,message_id,data,created_at FROM materials ORDER BY id').all().map(row => ({...row, ...JSON.parse(row.data), data: undefined}));
+  }
   expert(id) { return this.db.prepare('SELECT * FROM experts WHERE telegram_id=?').get(id); }
   addExpert(id, name) {
     if (!Number.isSafeInteger(id) || id <= 0 || !name?.trim() || name.length > 100) throw new Error('Valid Telegram ID and expert name required');

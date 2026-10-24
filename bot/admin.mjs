@@ -16,6 +16,11 @@ try {
   if (command === 'expert:add') {
     store.addExpert(Number(values.id), values.name);
     console.log('Confirmed expert registered. No Telegram messages sent.');
+  } else if (command === 'materials:allow') {
+    store.allowMaterials(Number(values.id));
+    console.log('Private materials inbox enabled for this Telegram account. No expert or order access granted.');
+  } else if (command === 'materials:list') {
+    for (const item of store.materials()) console.log(JSON.stringify({ id: item.id, userId: item.user_id, mimeType: item.mimeType, size: item.size, createdAt: item.created_at }));
   } else if (command === 'order:create') {
     const username = values['bot-name'] ?? process.env.TELEGRAM_BOT_USERNAME;
     if (!/^[A-Za-z0-9_]{5,32}$/.test(username ?? '')) throw new Error('Set a valid bot username (without @)');
@@ -34,7 +39,7 @@ try {
     for (const order of requests) console.log(JSON.stringify({ order: order.id, clientId: order.clientId,
       expertId: order.expertId, isTest: order.isTest === true, services: order.services.map(s => SERVICES[s]) }));
     if (!requests.length) console.log('No requests for additional services.');
-  } else throw new Error('Commands: expert:add --id ID --name NAME | order:create --expert ID --title TITLE (--track HTTPS_URL --price RUB | --test) --bot-name USERNAME | payment:confirm --id ORDER_ID --receipt-checked | status | requests');
+  } else throw new Error('Commands: expert:add --id ID --name NAME | order:create --expert ID --title TITLE (--track HTTPS_URL --price RUB | --test) --bot-name USERNAME | payment:confirm --id ORDER_ID --receipt-checked | status | requests | materials:allow --id ID | materials:list');
 } catch (error) {
   // Errors here contain validation details, never a Telegram token or API URL.
   console.error(error.message);

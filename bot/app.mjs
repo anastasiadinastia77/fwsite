@@ -160,6 +160,12 @@ export class BotApp {
   }
   message(actorId, message) {
     const text = message.text?.trim() ?? '';
+    if (text === '/materials') {
+      requireThat(this.store.canUploadMaterials(actorId), 'Передача материалов доступна владельцу проекта.');
+      this.store.setSession(actorId, { kind: 'materials', expiresAt: this.clock() + 60 * 60 * 1000 });
+      this.say(actorId, 'Пришли скриншоты страниц сайта: через скрепку → «Фото» или «Файл». Можно несколько изображений.\n\nКогда закончишь, напиши здесь «Готово», а в чате с Codex — «Отправила». Тогда изображения можно будет забрать для проверки. Автоматической пересылки в чат Codex нет.\n\nПриём открыт на час. /cancel — выйти.');
+      return;
+    }
     if (text.startsWith('/start')) {
       requireThat(/^\/start(?:@[A-Za-z0-9_]+)?(?:\s+[A-Za-z0-9_-]{32})?$/.test(text), 'Открой личную ссылку своего заказа.');
       const token = text.split(/\s+/)[1];
@@ -190,6 +196,33 @@ export class BotApp {
     }
     const session = this.store.session(actorId);
     if (!session) { this.showHome(actorId); return; }
+    if (session.kind === 'materials') {
+      requireThat(this.store.canUploadMaterials(actorId), 'Передача материалов недоступна.');
+      if (session.expiresAt <= this.clock()) {
+        this.store.setSession(actorId, null);
+        this.say(actorId, 'Приём материалов завершён. Для новых изображений отправь /materials.');
+        return;
+      }
+      if (text.toLocaleLowerCase('ru-RU') === 'готово') {
+        this.store.setSession(actorId, null);
+        this.say(actorId, 'Материалы сохранены. Теперь напиши в чате с Codex «Отправила» — изображения можно будет забрать и посмотреть.');
+        return;
+      }
+      const photo = Array.isArray(message.photo) ? message.photo.at(-1) : null;
+      const document = message.document;
+      const mime = photo ? 'image/jpeg' : document?.mime_type;
+      const media = photo ?? document;
+      requireThat(media && ['image/jpeg', 'image/png', 'image/webp'].includes(mime), 'Пришли изображение JPG, PNG или WebP через скрепку, либо напиши «Готово».');
+      requireThat(typeof media.file_id === 'string' && media.file_id.length > 0 && media.file_id.length <= 1024
+        && Number.isSafeInteger(message.message_id) && message.message_id > 0, 'Не удалось прочитать изображение. Пришли его ещё раз.');
+      requireThat(Number.isSafeInteger(media.file_size) && media.file_size > 0 && media.file_size <= 20 * 1024 * 1024, 'Пришли изображение размером до 20 МБ.');
+      const id = this.store.saveMaterial(actorId, message.message_id, {
+        fileId: media.file_id, mimeType: mime, size: media.file_size,
+        caption: typeof message.caption === 'string' ? message.caption.slice(0, 1024) : '',
+      }, this.clock());
+      this.say(actorId, `Изображение №${id} получено. Можно прислать следующее или написать «Готово».`);
+      return;
+    }
     const order = this.store.order(session.orderId);
     requireThat(order, 'Заказ не найден.');
     if (session.kind === 'review' || session.kind === 'answer') {
